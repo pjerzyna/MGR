@@ -1,0 +1,147 @@
+Dane dla sekwencji scene15_dyn_test_00_000000:
+
+Zdarzenia: 12,566,770 | 0.016668 .. 6.537270 s (6.521 s)
+ros_time_offset (meta): 1606267595.067450
+
+-- Szeregi czasowe w meta --
+  meta/frames [inne] n=393 ts 0.016667..6.550000 ~60.0 Hz | klucze: ['11', '14', '15', '22', '23', '24', '6', '9']
+  meta/full_trajectory [inne] n=1307 ts 0.018260..6.547387 ~200.0 Hz | klucze: ['11', '14', '15', '22', '23', '24', '6', '9']
+  meta/imu//prophesee/left/imu [IMU] n=6712 ts 0.016921..6.549406 ~1027.7 Hz | klucze: ['angular_velocity', 'linear_acceleration', 'ts']
+  meta/imu//prophesee/right/imu [IMU] n=6587 ts 0.033247..6.549022 ~1011.1 Hz | klucze: ['angular_velocity', 'linear_acceleration', 'ts']
+
+-- IMU vs zdarzenia (meta/imu//prophesee/left/imu) --
+  hipoteza 'ts IMU bez zmian': pokrycie zdarzeń przez IMU = 100.0%
+  hipoteza 'ts IMU - ros_time_offset': pokrycie zdarzeń przez IMU = 0.0%
+  hipoteza 'ts IMU + ros_time_offset': pokrycie zdarzeń przez IMU = 0.0%
+
+-- Jakość IMU --
+  dt: mediana 0.973 ms, std 0.000 ms, max 0.974 ms
+  |omega| [rad/s]: średnia 0.056, p95 0.110, max 0.168
+  |a| średnia 9.881 m/s^2 (oczek. ~9.81 lub ~1 g) | wektor średni [8.12, 0.96, -5.54]
+  maks. przesunięcie od rotacji w 10 ms: ~0.9 px (fx=556.6)
+
+-- Heurystyczna korelacja rate zdarzeń vs |omega| --
+  najlepsze opóźnienie: -15 ms, korelacja 0.56
+
+dataset_mask.npz: 393 klatek, numery [0, 1, 2]...[390, 391, 392]
+
+dataset_depth.npz: 393 klatek, numery [0, 1, 2]...[390, 391, 392]
+
+-- Klatki GT (meta/frames) --
+  393 klatek, ts 0.0167..6.5500, pola: ['11', '14', '15', '22', '23', '24', '6', '9', 'cam', 'gt_frame']
+  klatki GT w zakresie czasu zdarzeń: 99%
+
+-- Maski (próbka) --
+  mask_0000000106: obiekty(id:udział) 0:54.0%, 9:29.2%, 11:0.6%, 14:0.2%, 22:13.9%, 23:0.7%, 24:1.4%
+  mask_0000000196: obiekty(id:udział) 0:54.5%, 9:21.4%, 11:0.7%, 14:0.2%, 22:21.0%, 23:0.7%, 24:1.6%
+  mask_0000000084: obiekty(id:udział) 0:54.0%, 9:29.2%, 11:0.6%, 14:0.2%, 22:14.0%, 23:0.7%, 24:1.4%
+  mask_0000000079: obiekty(id:udział) 0:54.0%, 9:29.2%, 11:0.6%, 14:0.2%, 22:13.9%, 23:0.7%, 24:1.4%
+  mask_0000000380: obiekty(id:udział) 0:52.6%, 6:1.4%, 9:25.4%, 11:0.7%, 14:0.2%, 22:17.6%, 23:0.6%, 24:1.5%
+
+===== PODSUMOWANIE =====
+[OK] IMU pokrywa 100% czasu zdarzeń (hipoteza: ts IMU bez zmian)
+[OK] próbkowanie IMU równomierne, bez luk
+[?]  rotacja daje maks. ~0.9 px/10 ms - mało ruchu, sekwencja słaba do testu kompensacji
+[?]  xcorr: lag -15 ms, r=0.56 (heurystyka; sensowna tylko przy dominującym ruchu kamery)
+[OK] numery masek/głębi mapują się na klatki meta przez pole id
+[OK] 99% klatek GT w zakresie czasu zdarzeń
+
+
+
+
+
+=== INSPEKCJA EVIMO2: scene15_dyn_test_00_000000 ===
+
+====== PLIKI ======
+  dataset_classical.npz             0.00 MB
+  dataset_depth.npz                32.70 MB
+  dataset_events_p.npy             11.98 MB
+  dataset_events_t.npy             47.94 MB
+  dataset_events_xy.npy            47.94 MB
+  dataset_info.npz                  3.98 MB
+  dataset_mask.npz                  2.07 MB
+
+====== dataset_info.npz ======
+index: ndarray shape=(654,) dtype=uint32 min=0 max=12566769
+discretization: ndarray shape=() dtype=float64 min=0.01 max=0.01
+K: ndarray shape=(3, 3) dtype=float64 min=0.0 max=556.573975
+D: ndarray shape=(4,) dtype=float64 min=-0.10828 max=0.206233
+meta: dict[4] klucze=['frames', 'full_trajectory', 'imu', 'meta']
+  frames: list[393]  ts: 0.016667 .. 6.550000
+    [0]: dict[12] klucze=['11', '14', '15', '22', '23', '24', '6', '9', 'cam', 'gt_frame', 'id', 'ts']
+      11: dict[2] klucze=['pos', 'ts']
+      14: dict[2] klucze=['pos', 'ts']
+      15: dict[2] klucze=['pos', 'ts']
+      22: dict[2] klucze=['pos', 'ts']
+      23: dict[2] klucze=['pos', 'ts']
+      24: dict[2] klucze=['pos', 'ts']
+      6: dict[2] klucze=['pos', 'ts']
+      9: dict[2] klucze=['pos', 'ts']
+      cam: dict[2] klucze=['pos', 'ts']
+      gt_frame: str = 'depth_mask_0.png'
+      id: int = 0
+      ts: float = 0.016667
+  full_trajectory: list[1307]  ts: 0.018260 .. 6.547387
+    [0]: dict[12] klucze=['11', '14', '15', '22', '23', '24', '6', '9', 'cam', 'gt_frame', 'id', 'ts']
+      11: dict[2] klucze=['pos', 'ts']
+      14: dict[2] klucze=['pos', 'ts']
+      15: dict[2] klucze=['pos', 'ts']
+      22: dict[2] klucze=['pos', 'ts']
+      23: dict[2] klucze=['pos', 'ts']
+      24: dict[2] klucze=['pos', 'ts']
+      6: dict[2] klucze=['pos', 'ts']
+      9: dict[2] klucze=['pos', 'ts']
+      cam: dict[2] klucze=['pos', 'ts']
+      gt_frame: str = 'depth_mask_18446744073709551615.png'
+      id: int = 18446744073709551615
+      ts: float = 0.01826
+  imu: dict[2] klucze=['/prophesee/left/imu', '/prophesee/right/imu']
+    /prophesee/left/imu: list[6712]  ts: 0.016921 .. 6.549406
+      [0]: dict[3] klucze=['angular_velocity', 'linear_acceleration', 'ts']
+    /prophesee/right/imu: list[6587]  ts: 0.033247 .. 6.549022
+      [0]: dict[3] klucze=['angular_velocity', 'linear_acceleration', 'ts']
+  meta: dict[14] klucze=['cx', 'cy', 'dist_model', 'fx', 'fy', 'k1', 'k2', 'k3', 'k4', 'p1', 'p2', 'res_x', 'res_y', 'ros_time_offset']
+    cx: float = 321.846008
+    cy: float = 225.617996
+    dist_model: str = 'radtan'
+    fx: float = 556.573975
+    fy: float = 556.086975
+    k1: float = -0.10828
+    k2: float = 0.206233
+    k3: float = 0.0
+    k4: float = 0.0
+    p1: float = -0.00065
+    p2: float = -0.000555
+    res_x: int = 640
+    res_y: int = 480
+    ros_time_offset: float = 1606267595.06745
+
+  Znalezione szeregi czasowe (listy ze 'ts'):
+   meta/frames: n=393 ts 0.0167..6.5500 ~60.0 Hz
+   meta/full_trajectory: n=1307 ts 0.0183..6.5474 ~200.0 Hz
+   meta/imu//prophesee/left/imu: n=6712 ts 0.0169..6.5494 ~1027.7 Hz
+   meta/imu//prophesee/right/imu: n=6587 ts 0.0332..6.5490 ~1011.1 Hz
+
+  Intrinsics: {'cx': 321.84601, 'cy': 225.618, 'dist_model': 'radtan', 'fx': 556.57398, 'fy': 556.08698, 'k1': -0.10828, 'k2': 0.20623, 'k3': 0.0, 'k4': 0.0, 'p1': -0.00065, 'p2': -0.00056, 'res_x': 640, 'res_y': 480, 'ros_time_offset': 1606267595.06745}
+
+====== ZDARZENIA ======
+  N = 12,566,770 | t: float32(12566770,) xy: uint16(12566770, 2) p: uint8(12566770,)
+  czas: 0.016668 .. 6.537270 s (czas trwania 6.521 s)
+  UWAGA float32: rozdzielczość czasu przy końcu nagrania ~0.48 us
+  niemonotoniczne: 0 | najdłuższa przerwa: 0.072 ms
+  średnio 1.927 Mev/s | szczyt (10 ms): 5.860 Mev/s
+  x: 0..639 | y: 0..479  (rozdzielczość z meta 640x480: OK)
+  polaryzacja: wartości [0, 1], udział ON(!=0) = 0.651
+
+====== dataset_mask.npz ======
+  393 wpisów (maski = id obiektu * 1000); przykładowe klucze: ['mask_0000000106', 'mask_0000000196', 'mask_0000000084']
+  numery klatek: 0 .. 392
+  mask_0000000106: shape=(480, 640) dtype=uint16 unikalne=[0, 9000, 11000, 14000, 22000, 23000, 24000]
+
+====== dataset_depth.npz ======
+  393 wpisów (głębia uint16); przykładowe klucze: ['depth_0000000046', 'depth_0000000153', 'depth_0000000106']
+  numery klatek: 0 .. 392
+  depth_0000000046: shape=(480, 640) dtype=uint16 unikalne=[0, 547, 548, 549, 550, 551, 552, 553]
+
+====== dataset_classical.npz ======
+  klucze: ['empty']  (['empty'] = brak klatek klasycznych)
