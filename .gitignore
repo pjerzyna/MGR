@@ -1,9 +1,15 @@
 # auto generated files
 /venv
 /__pycache__/
+.vscode/
 
 .pytest_cache/
 tests/__pycache__/
 
 # data
+quick.py
 /data/
+
+# logs
+/evimo2_viewer/out/
+/evimo2_viewer/evimo2_viewer
