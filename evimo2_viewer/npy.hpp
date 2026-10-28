@@ -67,7 +67,7 @@ public:
     std::string describe() const {
         std::string s = descr_ + " shape=(";
         for (size_t i = 0; i < shape_.size(); ++i) s += (i ? "," : "") + std::to_string(shape_[i]);
-        return s + ")";
+        return s + (shape_.size() == 1 ? ",)" : ")");
     }
 
 private:

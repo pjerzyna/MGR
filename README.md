@@ -10,4 +10,6 @@ Narzędzia w Pythonie do inspekcji i weryfikacji spójności sekwencji EVIMO2v2
 | `evimo2_common.py` | wspólne funkcje (wczytywanie, przeszukiwanie struktury meta) |
 
 
+# TODO
+
 Bez EVIMO2_SEQ_DIR testy są pomijane. Plik tests/test_sequence_format.py zawiera trzy testy: format zdarzeń (kształty, typy, zakresy, monotoniczność czasu), struktura dataset_info.npz oraz spójność IMU i ground truth (pokrycie czasu, brak luk, numery masek/głębi vs klatki meta).

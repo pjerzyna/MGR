@@ -1,0 +1,3 @@
+#Przegląd wszystkich sekwencji EVIMO2 w katalogu: tabela do wyboru sekwencji do pracy.
+
+# tbc...
