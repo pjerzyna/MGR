@@ -1,6 +1,7 @@
 """Testy formatu i spójności prawdziwej sekwencji EVIMO2v2 (kamera lewa, Prophesee).
 
 Uruchomienie:
+    EVIMO2_SEQ_DIR=/ścieżka/do/scene15_dyn_test_00_000000 pytest
     EVIMO2_SEQ_DIR=/home/pawsooon/Documents/Vsc/npz_odczyty/data/npz_left_camera_imo/left_camera/imo/train/scene15_dyn_test_00_000000 pytest
 
 Bez zmiennej EVIMO2_SEQ_DIR testy są pomijane (np. po sklonowaniu repo bez danych).
@@ -75,7 +76,7 @@ def test_info_structure(info):
 
 
 def test_imu_and_ground_truth_consistency(seq_dir, info):
-    """IMU pokrywa zdarzenia bez luk, a maski/głębia mapują się na klatki z meta."""
+    """IMU pokrywa zdarzenia bez luk, a maski/głębia wskazują istniejące klatki z meta."""
     t = np.load(seq_dir / "dataset_events_t.npy", mmap_mode="r")
     e0, e1 = float(t[0]), float(t[-1])
 
@@ -94,4 +95,7 @@ def test_imu_and_ground_truth_consistency(seq_dir, info):
             assert (m[m > 0] % 1000 == 0).all(), f"{k}: wartości maski nie są wielokrotnością 1000"
     with np.load(seq_dir / "dataset_depth.npz") as z:
         depth_ids = {int(k.split("_")[-1]) for k in z.files}
-    assert mask_ids == frame_ids == depth_ids, "numery masek/głębi różnią się od id klatek w meta"
+    # Maski/głębia istnieją tylko dla części klatek (np. 75 z 104), więc wymagamy
+    # zgodności masek z głębią i tego, że każda maska wskazuje istniejącą klatkę meta.
+    assert mask_ids == depth_ids, "numery masek i głębi się różnią"
+    assert mask_ids <= frame_ids, "maski dla klatek, których nie ma w meta"
