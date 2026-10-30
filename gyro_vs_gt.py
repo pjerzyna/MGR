@@ -2,7 +2,7 @@
 """Żyroskop vs ground truth: opóźnienie IMU, rotacja IMU->kamera, bias, konwencja poz.
 
 Użycie:
-    python3 gyro_vs_gt.py <katalog_sekwencji> [--out DIR] [--step 2] [--max-lag 0.1] [--no-plot]
+    python3 gyro_vs_gt.py <katalog_sekwencji> [--out DIR | --out-root DIR] [--step 2] [--max-lag 0.1] [--no-plot]
 
 Metoda:
   1. Z kwaternionów kamery w full_trajectory liczymy prędkość kątową w układzie kamery
@@ -20,6 +20,7 @@ Metoda:
   5. Tabela ruchu per obiekt (prędkości w układzie świata zakładając, że obiekty mają tę
      samą konwencję co kamera - ZAŁOŻENIE).
 Zapisuje: <out>/gyro_vs_gt.png oraz <out>/gyro_vs_gt.json (R, opóźnienie, bias).
+  Domyślnie <out> = $EVIMO2_OUT/<sceneXX_NN> (albo ./out/<sceneXX_NN>, jeśli zmienna nie jest ustawiona).
 """
 import argparse
 import json
@@ -287,14 +288,15 @@ def make_plot(path, seq_name, A, B, win, ts_i, gyro, step):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("seq_dir")
-    ap.add_argument("--out", default=None, help="katalog wyjściowy (domyślnie out/<nazwa_sekwencji>)")
+    ap.add_argument("--out", default=None, help="katalog wyjściowy tej sekwencji")
+    ap.add_argument("--out-root", default=None, help="katalog główny wyników (domyślnie $EVIMO2_OUT albo ./out)")
     ap.add_argument("--step", type=int, default=2, help="odstęp próbek GT do różnicowania (2 = 10 ms)")
     ap.add_argument("--max-lag", type=float, default=0.1, help="zakres przeszukiwania opóźnienia [s]")
     ap.add_argument("--no-plot", action="store_true")
     a = ap.parse_args()
 
     seq = Path(a.seq_dir.rstrip("/"))
-    out = Path(a.out) if a.out else Path("out") / seq.name
+    out = Path(a.out) if a.out else ec.result_dir(seq.name, a.out_root)
     info = ec.load_info(seq)
     if info is None:
         sys.exit("brak dataset_info.npz")

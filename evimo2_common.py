@@ -1,5 +1,8 @@
 """Wspólne funkcje pomocnicze dla narzędzi EVIMO2 (wczytywanie, przeszukiwanie meta)."""
 import os
+import re
+from pathlib import Path
+
 import numpy as np
 
 
@@ -97,3 +100,34 @@ def describe(obj, name="root", depth=0, max_depth=3, out=print):
         out(s)
     else:
         out(f"{pad}{name}: {type(obj).__name__} = {short(obj)}")
+
+
+# ---------- lokalizacja wyników (gyro_vs_gt.json, event_lag_check.json, ...) ----------
+def seq_label(name):
+    """scene13_dyn_test_02_000000 -> scene13_02 (inne nazwy bez zmian)."""
+    m = re.match(r"^(scene\d+)_dyn_(?:test|train)_(\d+)_\d+$", name)
+    return f"{m.group(1)}_{m.group(2)}" if m else name
+
+
+def default_out_root():
+    """Katalog główny wyników: zmienna środowiskowa EVIMO2_OUT albo ./out."""
+    return Path(os.environ.get("EVIMO2_OUT", "out"))
+
+
+def result_dir_candidates(seq_name, out_root=None):
+    root = Path(out_root) if out_root else default_out_root()
+    return [root / seq_label(seq_name), root / seq_name]
+
+
+def result_dir(seq_name, out_root=None):
+    """Istniejący katalog wyników sekwencji (krótka nazwa ma pierwszeństwo) albo nowy (krótka nazwa)."""
+    cands = result_dir_candidates(seq_name, out_root)
+    return next((c for c in cands if c.is_dir()), cands[0])
+
+
+def find_result_file(seq_name, filename, out_root=None):
+    """Pierwszy istniejący plik <katalog wyników>/<filename> albo None."""
+    for c in result_dir_candidates(seq_name, out_root):
+        if (c / filename).is_file():
+            return c / filename
+    return None

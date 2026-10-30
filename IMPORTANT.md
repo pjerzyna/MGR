@@ -7,6 +7,9 @@
 - Sekwencja scene6_dyn_train_03 ma 1,717 s i 2,53 mln zdarzeń. Średnia to 1,47 Mev/s, a maksimum w oknie 10 ms to 5,70 Mev/s.
 - Wynik jest bardzo zbliżony do scene15_00 (średnio 1,93, szczyt 5,86 Mev/s), więc na razie na dwóch sekwencjach rząd wielkości szczytu to ok. 5,7–5,9 Mev/s. To dopiero dwa punkty danych - nie traktujmy tego jako ogólnej reguły.
 - Mediana (0,80) jest dwa razy niższa od średniej (1,47), a p95 to 4,85. Strumień jest więc bardzo nierównomierny: większość czasu jest spokojna, a krótkie okresy ruchu dają wielokrotnie wyższe przepustowości. To argument za projektowaniem pod szczyt, a nie pod średnią.
+- Konwencja poz: A (T_świat←kamera), potwierdzona na 19/19 sekwencji, stosunek residuum co najmniej 2,4.
+- Rotacja IMU→kamera ≈ obrót o 180° wokół osi z kamery, odchylenia poniżej 1°. Bias żyroskopu ≈ (−0,0295; 0,0154; 0,0180) rad/s.
+- Opóźnienie IMU względem GT zmienia się liniowo z czasem nagrania o ok. +11 ppm w obrębie sesji, a w obrębie jednej sekwencji jest stałe. Trzeba je estymować osobno dla każdej sekwencji (wartość początkowa od −31 do 0 ms). Zmierzone względem GT, a nie względem zdarzeń --> Do sprawdzenia.
 
 # Shortlista z różnymi reżimami ruchu i różnymi scenami
 - Bardzo dynamiczna sekwencja to scene13_dyn_test_02, która ma 13 s nagrania, predkosc kątowa do 2,76 rad/s (ok. 15 px na 10 ms od samej rotacji), obrót kamery o 112° i v do 1,2 m/s.
