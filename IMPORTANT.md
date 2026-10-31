@@ -32,3 +32,11 @@
 ## Decyzje robocze (do potwierdzenia)
 - Do rozwoju i oceny używać opóźnienia z GT per sekwencja jako skalibrowanego parametru; estymacja ze zdarzeń jako osobne zagadnienie.
 - Konfiguracja: wyniki w $EVIMO2_OUT/sceneXX_NN/.
+
+## Pozy obiektów
+- Konwencja poz obiektów (T_kamera←obiekt, klasa R*S): w 4 sekwencjach z JSON i obrotem kamery >= 10° stałych jest odpowiednio 4/8, 7/9, 4/8, 3/8 obiektów w tej klasie i 0 w każdej innej [USTALONE]. Do potwierdzenia na pełnych 19 sekwencjach.
+
+- Konwencja poz obiektów T_kamera←obiekt (klasa R*S): 11/11 sekwencji z obrotem kamery >= 10°, w każdej 3–7 obiektów stałych w tej klasie i 0 w każdej innej [USTALONE].
+- Statyczne obiekty mają przemieszczenie p95 < 0,5 cm (100 z 163 obiektów; luka 0,5–1 cm), szum rotacji statycznych sięga 7,3°. Ruchome nie mają wyraźnej luki od statycznych poniżej 10 cm (16 obiektów 1–10 cm). Globalna flaga „ruchomy” nie nadaje się jako ground truth: id 9 (ok. 30% obrazu) jest oznaczony w 9 sekwencjach przy przemieszczeniu 1,2–6,3 cm. Potrzebne etykiety w czasie z progiem prędkości (statyczne v p95 <= 1,7 cm/s, ruchome ok. 1,1–1,3 m/s).
+- scene6_03 (klatki zdarzeń co 100 ms): zdarzenia skupione na kilku strukturach przesuwających się po obrazie (duży prostokątny element z uchwytem, okrągły obiekt, panel przy krawędzi), tło w większości bez zdarzeń, klatki 0000 i 0050 prawie puste. Zgodne z ruchomą sceną i nieruchomą kamerą; ruch jest impulsowy, więc potrzebne etykiety zależne od czasu. Dowód jakościowy (nie ilościowy) - do potwierdzenia walidacją gęstości zdarzeń w masce IMO.
+- Etykiety ruchu w czasie: imo_labels.py (v > 5 cm/s lub ω > 1 rad/s, progi wstępne); żadne etykiety ani sekwencje nie są wykluczane, jakość oznaczana walidacją.
