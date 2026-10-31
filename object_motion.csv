@@ -1,0 +1,20 @@
+sequence,cam_rot_deg,n_obj,class_used,class_source,n_moving,moving_ids
+scene13_dyn_test_00_000000,3.026580501065966,8,R*S,wymuszona/głosowanie,2,5 24
+scene13_dyn_test_05_000000,24.141879747857246,9,R*S,własna,3,5 6 14
+scene14_dyn_test_03_000000,29.659673105631335,9,R*S,własna,2,6 9
+scene14_dyn_test_04_000000,42.78406006816355,8,R*S,własna,2,6 23
+scene14_dyn_test_05_000000,28.53145451693099,8,R*S,własna,2,6 23
+scene15_dyn_test_01_000000,10.806146859174955,8,R*S,własna,5,6 9 11 15 23
+scene15_dyn_test_02_000000,4.928584999545518,8,R*S,wymuszona/głosowanie,3,6 9 23
+scene15_dyn_test_05_000000,3.033981229963948,8,R*S,wymuszona/głosowanie,4,6 9 15 23
+scene13_dyn_test_01_000000,23.536279184427134,8,R*S,własna,4,5 14 15 24
+scene13_dyn_test_02_000000,112.00978099142226,8,R*S,własna,4,6 14 15 24
+scene13_dyn_test_03_000000,32.53535626019518,9,R*S,własna,6,5 6 14 15 23 24
+scene14_dyn_test_00_000000,51.46918616329895,9,R*S,własna,1,6
+scene14_dyn_test_01_000000,30.27664007533861,9,R*S,własna,1,6
+scene14_dyn_test_02_000000,4.661228728332504,9,R*S,wymuszona/głosowanie,2,6 9
+scene15_dyn_test_00_000000,3.328324179887089,8,R*S,wymuszona/głosowanie,3,6 9 23
+scene15_dyn_test_03_000000,64.57303552914091,8,R*S,własna,3,6 14 23
+scene15_dyn_test_04_000000,6.2030269796001525,8,R*S,wymuszona/głosowanie,3,14 15 23
+scene15_dyn_test_06_000000,0.5024067403172826,8,R*S,wymuszona/głosowanie,5,6 9 11 14 23
+scene6_dyn_train_03_000000,0.2419972431299193,13,R*S,wymuszona/głosowanie,13,8 10 12 13 17 18 19 20 22 25 26 27 28

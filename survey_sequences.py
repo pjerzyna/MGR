@@ -3,21 +3,20 @@
 
 Użycie:
     python3 survey_sequences.py <katalog_z_danymi> [--csv survey.csv] [--sort rot_px_10ms]
-                                [--step 5] [--move-thr-m 0.05] [--move-thr-deg 5]
+                                [--step 5]
 
 Szuka rekurencyjnie katalogów z dataset_info.npz. Dla każdej sekwencji liczy:
   * zdarzenia: czas trwania, przepustowość w oknach 10 ms (średnia/p95/max) - te same
     okna co `evimo2_viewer --stats-only`, więc wartości są porównywalne,
   * IMU lewej kamery: |omega| (średnia/p95/max) i maks. przesunięcie od rotacji w 10 ms [px],
-  * ground truth z full_trajectory (200 Hz): ruch kamery i obiektów.
+  * ground truth z full_trajectory (200 Hz): ruch kamery i liczba obiektów (ruch obiektów w świecie
+    liczy object_motion.py, który też ustala konwencję poz obiektów).
 
 UWAGA - konwencja poz nie jest jeszcze potwierdzona (T_świat<-kamera czy odwrotnie):
   * kąty obrotu i prędkość kątową kamery liczymy z kąta względnego obrotu - nie zależy
     od konwencji,
   * prędkość liniową kamery podajemy w dwóch hipotezach: `cam_v_max` (t = pozycja kamery)
     i `cam_v_max_alt` (pozycja = -R^T t); jeśli się mocno różnią, konwencja ma znaczenie,
-  * `n_obj_moving` zakłada, że pozy obiektów są w stałym układzie świata (obiekt statyczny =
-    stała poza); to hipoteza, nie ustalony fakt.
 Prędkości liczone są na odstępie --step próbek (domyślnie 5 = 25 ms) dla redukcji szumu.
 """
 import argparse
@@ -37,7 +36,6 @@ PRINT_COLS = [  # (klucz, nagłówek, format)
     ("imu_w_max", "ω_imu max", "{:.3f}"), ("rot_px_10ms", "rot px/10ms", "{:.2f}"),
     ("cam_w_max_gt", "ω_gt max", "{:.3f}"), ("cam_v_max", "v_cam max", "{:.3f}"),
     ("cam_rot_deg", "rot_cam[°]", "{:.1f}"), ("n_obj", "obiekty", "{}"),
-    ("n_obj_moving", "ruchome*", "{}"),
 ]
 
 
@@ -128,7 +126,7 @@ def motion(ts, q, t, step):
                 disp_m=float(np.linalg.norm(t - t[0], axis=1).max()))
 
 
-def gt_stats(info, seq, step, thr_m, thr_deg):
+def gt_stats(info, seq, step):
     meta = info["meta"]
     traj = meta.get("full_trajectory") or []
     out = dict(gt_frames=len(meta.get("frames", [])))
@@ -143,21 +141,11 @@ def gt_stats(info, seq, step, thr_m, thr_deg):
     m = motion(*cam, step)
     out.update(cam_w_max_gt=m["w_max"], cam_v_max=m["v_max"], cam_v_max_alt=m["v_alt_max"],
                cam_rot_deg=m["rot_deg"], cam_disp_m=m["disp_m"])
-    obj_ids = sorted({k for e in traj for k in e if isinstance(k, str) and k.isdigit()}, key=int)
-    moving, disp_max, rot_max, n_obj = 0, 0.0, 0.0, 0
-    for k in obj_ids:
-        s = pose_series(traj, k)
-        if s is None:
-            continue
-        n_obj += 1
-        mo = motion(*s, step)
-        disp_max, rot_max = max(disp_max, mo["disp_m"]), max(rot_max, mo["rot_deg"])
-        moving += int(mo["disp_m"] > thr_m or mo["rot_deg"] > thr_deg)
-    out.update(n_obj=n_obj, n_obj_moving=moving, obj_disp_max_m=disp_max, obj_rot_max_deg=rot_max)
+    out["n_obj"] = len({k for e in traj for k in e if isinstance(k, str) and k.isdigit()})
     return out
 
 
-def survey_sequence(seq, step=5, thr_m=0.05, thr_deg=5.0):
+def survey_sequence(seq, step=5):
     seq = Path(seq)
     info = ec.load_info(seq)
     if info is None:
@@ -168,7 +156,7 @@ def survey_sequence(seq, step=5, thr_m=0.05, thr_deg=5.0):
     row = dict(name=seq.name, split=seq.parent.name)
     row.update(event_stats(seq))
     row.update(imu_stats(info, float(intr["fx"])))
-    row.update(gt_stats(info, seq, step, thr_m, thr_deg))
+    row.update(gt_stats(info, seq, step))
     return row
 
 
@@ -190,8 +178,6 @@ def main():
     ap.add_argument("--csv", default="survey.csv")
     ap.add_argument("--sort", default="rot_px_10ms", help="klucz kolumny, malejąco")
     ap.add_argument("--step", type=int, default=5)
-    ap.add_argument("--move-thr-m", type=float, default=0.05)
-    ap.add_argument("--move-thr-deg", type=float, default=5.0)
     a = ap.parse_args()
 
     seqs = sorted(p.parent for p in Path(a.root).rglob("dataset_info.npz"))
@@ -201,16 +187,13 @@ def main():
     for i, s in enumerate(seqs, 1):
         print(f"[{i}/{len(seqs)}] {s.name}", file=sys.stderr)
         try:
-            rows.append(survey_sequence(s, a.step, a.move_thr_m, a.move_thr_deg))
+            rows.append(survey_sequence(s, a.step))
         except Exception as ex:                       # jedna zła sekwencja nie przerywa przeglądu
             errors.append((s.name, str(ex)))
     rows.sort(key=lambda r: r.get(a.sort, float("-inf")), reverse=True)
 
     print()
     print_table(rows)
-    print("\n* ruchome = obiekty o przemieszczeniu > %.2f m lub obrocie > %.0f° od pierwszej pozy,"
-          " przy założeniu, że pozy są w stałym układzie świata (niepotwierdzone)."
-          % (a.move_thr_m, a.move_thr_deg))
     for name, err in errors:
         print(f"BŁĄD {name}: {err}")
 

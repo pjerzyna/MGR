@@ -17,8 +17,7 @@ Metoda:
   4. Konwencję rozstrzyga residuum (zła konwencja daje ω w innym układzie i znak,
      którego stała rotacja nie wchłonie) oraz niezależny test grawitacji: a_świat(t) =
      R_wc(t) R a_imu(t) powinno mieć stały kierunek.
-  5. Tabela ruchu per obiekt (prędkości w układzie świata zakładając, że obiekty mają tę
-     samą konwencję co kamera - ZAŁOŻENIE).
+  (Ruch obiektów w świecie i konwencję ich poz ustala object_motion.py.)
 Zapisuje: <out>/gyro_vs_gt.png oraz <out>/gyro_vs_gt.json (R, opóźnienie, bias).
   Domyślnie <out> = $EVIMO2_OUT/<sceneXX_NN> (albo ./out/<sceneXX_NN>, jeśli zmienna nie jest ustawiona).
 """
@@ -30,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 import evimo2_common as ec
-from survey_sequences import pose_series, qangle, qconj, qmul, rot_inv   # pomocnicze funkcje poz
+from survey_sequences import pose_series, qconj, qmul   # pomocnicze funkcje poz
 
 MARGIN = 0.02      # [s] odcinek brzegowy pomijany w dopasowaniu
 BLOCK = 0.25       # [s] długość bloku w bootstrapie
@@ -214,29 +213,6 @@ def verdict(A, B):
     return win
 
 
-def object_table(traj, conv, step):
-    ids = sorted({k for e in traj for k in e if isinstance(k, str) and k.isdigit()}, key=int)
-    rows = []
-    for key in ["cam"] + ids:
-        s = pose_series(traj, key)
-        if s is None:
-            continue
-        ts, q, t = s
-        st = max(1, min(step, len(ts) - 1))
-        p = t if conv == "A" else -rot_inv(q, t)
-        dt = ts[st:] - ts[:-st]
-        ok = dt > 0
-        v = np.linalg.norm(p[st:] - p[:-st], axis=1)[ok] / dt[ok]
-        w = qangle(q[:-st], q[st:])[ok] / dt[ok]
-        rows.append((key, np.median(v), np.percentile(v, 95), v.max(), np.percentile(w, 95), float((v > 0.05).mean())))
-    print("\n== Ruch w układzie świata (obiekty: ZAŁOŻENIE tej samej konwencji co kamera) ==")
-    print(f"  {'id':>4}  {'v med':>7}  {'v p95':>7}  {'v max':>7}  {'ω p95':>7}  {'czas v>5cm/s':>12}")
-    print(f"  {'':>4}  {'[m/s]':>7}  {'[m/s]':>7}  {'[m/s]':>7}  {'[rad/s]':>7}")
-    for key, med, p95, mx, wp, fr in sorted(rows, key=lambda r: (r[0] != "cam", -r[2])):
-        print(f"  {('cam' if key == 'cam' else key):>4}  {med:7.3f}  {p95:7.3f}  {mx:7.3f}  {wp:7.3f}  {fr * 100:11.0f}%")
-    return rows
-
-
 # ---------- wykres ----------
 def make_plot(path, seq_name, A, B, win, ts_i, gyro, step):
     import matplotlib
@@ -328,7 +304,7 @@ def main():
     report(A)
     report(B)
     win = verdict(A, B)
-    object_table(traj, win["conv"], st)
+    print("\nRuch obiektów w świecie: patrz object_motion.py.")
 
     out.mkdir(parents=True, exist_ok=True)
     lose = B if win is A else A

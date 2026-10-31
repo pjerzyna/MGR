@@ -1,19 +1,22 @@
-"""Testy formatu i spójności prawdziwej sekwencji EVIMO2v2 (kamera lewa, Prophesee).
+"""Testy formatu, spójności i ustalonej kalibracji prawdziwej sekwencji EVIMO2v2 (kamera lewa, Prophesee).
 
 Uruchomienie:
     EVIMO2_SEQ_DIR=/ścieżka/do/scene15_dyn_test_00_000000 pytest
     EVIMO2_SEQ_DIR=/home/pawsooon/Documents/Vsc/npz_odczyty/data/npz_left_camera_imo/left_camera/imo/train/scene15_dyn_test_00_000000 pytest
-
+    
 Bez zmiennej EVIMO2_SEQ_DIR testy są pomijane (np. po sklonowaniu repo bez danych).
 Testy niczego nie modyfikują - tylko czytają wskazaną sekwencję.
 """
+import json
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 import evimo2_common as ec
+import gyro_vs_gt
 
 LEFT_IMU = "/prophesee/left/imu"
 
@@ -99,3 +102,24 @@ def test_imu_and_ground_truth_consistency(seq_dir, info):
     # zgodności masek z głębią i tego, że każda maska wskazuje istniejącą klatkę meta.
     assert mask_ids == depth_ids, "numery masek i głębi się różnią"
     assert mask_ids <= frame_ids, "maski dla klatek, których nie ma w meta"
+
+
+def test_gyro_vs_gt_calibration(seq_dir, tmp_path, monkeypatch):
+    """Ustalona kalibracja zestawu: konwencja poz A, R_imu->cam ~ obrót o 180 deg wokół osi z, bias.
+
+    Pilnuje wyników, które potok C++ ma przyjąć na stałe. Wymaga sekwencji z wyraźnym ruchem
+    (residuum dopasowania < 15%); dla sekwencji z małym ruchem test jest pomijany, bo kalibracja
+    z takich danych jest niewiarygodna (np. scene15_00, scene6_03).
+    """
+    monkeypatch.setattr(sys, "argv", ["gyro_vs_gt.py", str(seq_dir), "--out", str(tmp_path), "--no-plot"])
+    gyro_vs_gt.main()
+    res = json.loads((tmp_path / "gyro_vs_gt.json").read_text())
+    if res["residual_rel"] > 0.15:
+        pytest.skip(f"za mało ruchu w tej sekwencji (residuum {res['residual_rel']:.0%}); wybierz np. scene14_05 lub scene13_02")
+
+    assert res["convention"] == "A"
+    R = np.array(res["R_imu_to_cam"])
+    cos = (np.trace(R @ np.diag([-1.0, -1.0, 1.0])) - 1) / 2          # kąt między R a diag(-1, -1, 1)
+    assert np.degrees(np.arccos(np.clip(cos, -1, 1))) < 2.0
+    assert np.allclose(res["gyro_bias_imu_rad_s"], [-0.0295, 0.0154, 0.0180], atol=0.01)
+    assert -0.05 < res["lag_s"] < 0.02, "opóźnienie IMU poza zmierzonym zakresem -31..+0 ms"
