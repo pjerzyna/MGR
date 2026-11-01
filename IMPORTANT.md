@@ -40,3 +40,24 @@
 - Statyczne obiekty mają przemieszczenie p95 < 0,5 cm (100 z 163 obiektów; luka 0,5–1 cm), szum rotacji statycznych sięga 7,3°. Ruchome nie mają wyraźnej luki od statycznych poniżej 10 cm (16 obiektów 1–10 cm). Globalna flaga „ruchomy” nie nadaje się jako ground truth: id 9 (ok. 30% obrazu) jest oznaczony w 9 sekwencjach przy przemieszczeniu 1,2–6,3 cm. Potrzebne etykiety w czasie z progiem prędkości (statyczne v p95 <= 1,7 cm/s, ruchome ok. 1,1–1,3 m/s).
 - scene6_03 (klatki zdarzeń co 100 ms): zdarzenia skupione na kilku strukturach przesuwających się po obrazie (duży prostokątny element z uchwytem, okrągły obiekt, panel przy krawędzi), tło w większości bez zdarzeń, klatki 0000 i 0050 prawie puste. Zgodne z ruchomą sceną i nieruchomą kamerą; ruch jest impulsowy, więc potrzebne etykiety zależne od czasu. Dowód jakościowy (nie ilościowy) - do potwierdzenia walidacją gęstości zdarzeń w masce IMO.
 - Etykiety ruchu w czasie: imo_labels.py (v > 5 cm/s lub ω > 1 rad/s, progi wstępne); żadne etykiety ani sekwencje nie są wykluczane, jakość oznaczana walidacją.
+- scene6_03 ZWALIDOWANA: gęstość zdarzeń w masce IMO / poza = 27,7× (87% zdarzeń w 19% powierzchni), nieruchoma kamera. Ruch obiektów impulsowy: brak ruchu do 0,65 s; klatki 39–54 12–13 z 13 obiektów naraz; luka masek dla klatek 61–89 (1,02–1,5 s). Czysty przypadek IMO (bez ruchu własnego).
+- W zbiorze ruch kamery i obecność IMO są odwrotnie skorelowane (Spearman −0,78, 19 sekwencji): ω_gt >= 0,8 rad/s: IMO średnio 1,3%; ω_gt < 0,3 rad/s: 7,7%. Nie ma sekwencji z silnym ruchem kamery i dużym IMO.
+- Walidacja zdarzeniowa etykiet IMO: wiarygodna tylko przy słabym ruchu kamery (stosunek gęstości 2,7–13,8×, scene6_03 27,7×); przy silnym ruchu ≈ 1 (tło generuje zdarzenia), nie rozstrzyga.
+- Podejrzenie: p95 udziału IMO 33–46% (14_02, 14_03, 15_02, 15_04, 15_05, 15_06) - flagowanie dużych obiektów (9, 22) w krótkich epizodach; do rozstrzygnięcia rozbiciem „tylko ω” vs „v” w imo_labels.py.
+- Próg prędkości: płytkie minimum w histogramie przy 0,05–0,1 m/s (449 par obiekt–klatka); v >= 0,05: 8,6% par, v >= 0,1: 7,3%. Wybór progu do potwierdzenia sweepem (0,03/0,05/0,1/0,2) i walidacją.
+- scene13_05 ma tylko 13 masek - nie nadaje się do oceny.
+- Rozbicie flag ruchu: oznaczenia wyłącznie przez ω (v <= 5 cm/s) to margines (<= 0,5 pkt proc. IMO w najgorszych sekwencjach: 15_05 5,79→5,30%, 15_06 7,92→7,50%; w pozostałych <= 0,2 pkt). Wysokie p95 IMO (33–46%) w 14_02, 14_03, 15_02, 15_04, 15_05, 15_06 pochodzi z prędkości liniowej dużych obiektów (9, 22) > 5 cm/s, nie z szumu rotacji. Hipoteza: powolne ruchy (5–10 cm/s, ok. 0,3 s) dużych obiektów, zgodne z ich całkowitym przemieszczeniem 1–6 cm; wspierane walidacją zdarzeniową (7,3×, 9,0×, 13,8× przy słabym ruchu kamery).
+- Konsekwencja dla oceny: obiekty powolne (v rzędu 5–30 cm/s) generują bardzo mało zdarzeń, a mogą zajmować 30–45% obrazu, więc dominowałyby w IoU. Raportować wyniki osobno dla IMO szybkich (v > 0,3 m/s) i wszystkich (v > 0,05 m/s); żadne etykiety nie są usuwane.
+- scene14_00: praktycznie brak IMO (średnio 0,08%, walidacja 0,9×) - test fałszywych alarmów, nie ocena detekcji.
+
+## Przyszły wybór sewkencji???
+- scene6_03	nieruchoma kamera, dużo IMO	zwalidowana (27,7×), czysta segmentacja bez kompensacji
+- scene15_05	słaby ruch, dużo IMO	295 masek, IMO 5,8%, walidacja 9,0×
+- scene15_00	słaby ruch, dużo IMO	393 maski, IMO 8,7%, baseline z wcześniejszej listy
+- scene14_05	obrót dominujący	kalibracja wiarygodna (5,4%), IMO 0,9%, 252 maski
+- scene14_04	umiarkowany ruch	kalibracja 9,1%, IMO 1,0%, 285 masek
+- scene14_03	umiarkowany ruch, większe IMO	kalibracja 10,9%, IMO 2,7% (do sprawdzenia flagowanie dużych obiektów)
+- scene15_03	duża translacja	kalibracja 4,0%, IMO 2,0%, walidacja 9,4×
+- scene13_01	umiarkowany ruch	kalibracja 7,5%, IMO 1,2%, 392 maski
+- scene13_02	skrajny ruch, test fałszywych alarmów	13 s, 112°, 750 masek, IMO 0,2%
+- scene13_03 lub 14_00	długi, silny ruch, test przepustowości	12,8 s lub 8 s; IMO < 0,3%

@@ -32,6 +32,7 @@ import evimo2_common as ec
 import object_motion as om
 from survey_sequences import qangle
 
+V_THRESHOLDS = [0.05, 0.1, 0.3, 1.0]      # stałe progi do zestawienia udziału IMO w funkcji prędkości
 V_EDGES = [0, 0.005, 0.01, 0.02, 0.05, 0.1, 0.3, 1.0]
 W_EDGES = [0, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0]
 
@@ -88,6 +89,7 @@ def process(seq, a, cls):
         t_ev, xy_ev, _ = ec.load_events(seq)
         ev = (t_ev, xy_ev)
     frames, masks_out = [], {}
+    area_by_v = [[] for _ in V_THRESHOLDS]
     per_obj, vs, ws = {}, [], []
     val = dict(n_in=0, n_out=0, a_in=0, a_out=0, frames=0)
     unknown_ids, no_ts = set(), 0
@@ -101,7 +103,8 @@ def process(seq, a, cls):
             m = z[key]
             lab = m // 1000
             ids, cnt = np.unique(lab[lab > 0], return_counts=True)
-            moving = []
+            moving, moving_v = [], []
+            area_v = [0.0] * len(V_THRESHOLDS)
             for oid, c in zip(ids, cnt):
                 kk = str(int(oid))
                 if kk not in kin:
@@ -109,15 +112,26 @@ def process(seq, a, cls):
                     continue
                 v = float(np.interp(tsf, kin[kk]["ts"], kin[kk]["v"]))
                 w = float(np.interp(tsf, kin[kk]["ts"], kin[kk]["w"]))
-                mv = v > a.v_thr or w > a.w_thr
+                for j, th in enumerate(V_THRESHOLDS):
+                    if v > th:
+                        area_v[j] += c / m.size
+                mv_v, mv_w = v > a.v_thr, w > a.w_thr
+                mv = mv_v or mv_w
                 vs.append(v); ws.append(w)
-                o = per_obj.setdefault(kk, dict(present=0, moving=0, area_sum=0.0, area_mov_sum=0.0, v=[]))
+                o = per_obj.setdefault(kk, dict(present=0, moving=0, w_only=0, area_sum=0.0, area_mov_sum=0.0, v=[]))
                 o["present"] += 1; o["area_sum"] += c / m.size; o["v"].append(v)
                 if mv:
                     o["moving"] += 1; o["area_mov_sum"] += c / m.size
+                    o["w_only"] += int(not mv_v)
                     moving.append(int(oid))
+                if mv_v:
+                    moving_v.append(int(oid))
             imo = np.isin(lab, moving) if moving else np.zeros(m.shape, bool)
-            frames.append(dict(id=fid, ts=tsf, moving_ids=[str(i) for i in moving], imo_frac=float(imo.mean())))
+            for j in range(len(V_THRESHOLDS)):
+                area_by_v[j].append(area_v[j])
+            imo_v = np.isin(lab, moving_v) if moving_v else np.zeros(m.shape, bool)
+            frames.append(dict(id=fid, ts=tsf, moving_ids=[str(i) for i in moving], imo_frac=float(imo.mean()),
+                               imo_frac_v_only=float(imo_v.mean())))
             if a.save_masks:
                 masks_out[f"imo_{fid:010d}"] = imo.astype(np.uint8)
             if ev is not None and imo.any():
@@ -134,11 +148,18 @@ def process(seq, a, cls):
         raise ValueError("żadna maska nie ma znacznika czasu w meta['frames']")
 
     fr = np.array([f["imo_frac"] for f in frames])
+    fv = np.array([f["imo_frac_v_only"] for f in frames])
     res = dict(sequence=Path(seq).name, class_used=cls, thresholds=dict(v_thr=a.v_thr, w_thr=a.w_thr, half_ms=a.half_ms),
                n_frames=len(frames), frames_without_ts=no_ts, ids_without_pose=sorted(unknown_ids),
                imo_frac=dict(mean=float(fr.mean()), p95=float(np.percentile(fr, 95)), max=float(fr.max()),
                              frames_with_imo=float((fr > 0).mean())),
+               imo_frac_v_only=dict(mean=float(fv.mean()), p95=float(np.percentile(fv, 95)), max=float(fv.max()),
+                                    frames_with_imo=float((fv > 0).mean())),
+               imo_frac_by_v_thr={str(th): dict(mean=float(np.mean(x)), p95=float(np.percentile(x, 95)),
+                                                frames_with_imo=float((np.array(x) > 0).mean()))
+                                  for th, x in zip(V_THRESHOLDS, area_by_v)},
                objects={k: dict(frames_present=o["present"], frames_moving=o["moving"],
+                                frames_moving_only_by_w=o["w_only"],
                                 frac_moving=o["moving"] / o["present"], mean_area_frac=o["area_sum"] / o["present"],
                                 mean_area_frac_when_moving=(o["area_mov_sum"] / o["moving"]) if o["moving"] else 0.0,
                                 v_p95=float(np.percentile(o["v"], 95))) for k, o in sorted(per_obj.items(), key=lambda x: int(x[0]))},
@@ -160,14 +181,19 @@ def print_report(r, vs, ws):
         print(f"[UWAGA] {r['frames_without_ts']} masek bez znacznika czasu w meta['frames'] - pominięte.")
     if r["ids_without_pose"]:
         print(f"[UWAGA] obiekty w maskach bez póz (traktowane jako nie-ruchome): {', '.join(r['ids_without_pose'])}")
-    print(f"\n{'id':>4} {'klatek':>7} {'ruchomy':>8} {'śr. obszar':>11} {'obszar gdy ruch.':>17} {'v p95':>7}")
-    print(f"{'':>4} {'':>7} {'[%]':>8} {'[% obrazu]':>11} {'[% obrazu]':>17} {'[m/s]':>7}")
+    print(f"\n{'id':>4} {'klatek':>7} {'ruchomy':>8} {'w tym tylko ω':>14} {'śr. obszar':>11} {'obszar gdy ruch.':>17} {'v p95':>7}")
+    print(f"{'':>4} {'':>7} {'[%]':>8} {'[% klatek]':>14} {'[% obrazu]':>11} {'[% obrazu]':>17} {'[m/s]':>7}")
     for k, o in r["objects"].items():
-        print(f"{k:>4} {o['frames_present']:7d} {100 * o['frac_moving']:8.0f} {100 * o['mean_area_frac']:11.1f} "
-              f"{100 * o['mean_area_frac_when_moving']:17.1f} {o['v_p95']:7.3f}")
+        print(f"{k:>4} {o['frames_present']:7d} {100 * o['frac_moving']:8.0f} {100 * o['frames_moving_only_by_w'] / o['frames_present']:14.0f} "
+              f"{100 * o['mean_area_frac']:11.1f} {100 * o['mean_area_frac_when_moving']:17.1f} {o['v_p95']:7.3f}")
     im = r["imo_frac"]
     print(f"\nIMO: średnio {100 * im['mean']:.2f}% obrazu, p95 {100 * im['p95']:.2f}%, max {100 * im['max']:.2f}%; "
           f"klatek z ruchomym obiektem: {100 * im['frames_with_imo']:.0f}%")
+    iv = r["imo_frac_v_only"]
+    print(f"IMO tylko z v (bez obiektów oznaczonych wyłącznie przez ω): średnio {100 * iv['mean']:.2f}%, p95 {100 * iv['p95']:.2f}%, "
+          f"klatek z ruchomym obiektem: {100 * iv['frames_with_imo']:.0f}%")
+    print("Udział IMO (tylko v) w funkcji progu prędkości: " + "; ".join(
+        f"v > {th}: śr. {100 * d['mean']:.2f}%, p95 {100 * d['p95']:.2f}%" for th, d in r["imo_frac_by_v_thr"].items()))
     v = r["validation"]
     if v:
         print(f"Walidacja ({v['frames']} klatek z IMO; zdarzenia ±{v['act_ms']} ms, maska + {v['dilate_px']} px): gęstość zdarzeń "
@@ -225,11 +251,16 @@ def main():
         v = res["validation"]
         rows.append(dict(sequence=s.name, frames=res["n_frames"], imo_mean_pct=100 * res["imo_frac"]["mean"],
                          imo_p95_pct=100 * res["imo_frac"]["p95"], frames_with_imo_pct=100 * res["imo_frac"]["frames_with_imo"],
+                         imo_v_only_mean_pct=100 * res["imo_frac_v_only"]["mean"], imo_v_only_p95_pct=100 * res["imo_frac_v_only"]["p95"],
+                         imo_v01_mean_pct=100 * res["imo_frac_by_v_thr"]["0.1"]["mean"], imo_v01_p95_pct=100 * res["imo_frac_by_v_thr"]["0.1"]["p95"],
+                         imo_v03_mean_pct=100 * res["imo_frac_by_v_thr"]["0.3"]["mean"], imo_v03_p95_pct=100 * res["imo_frac_by_v_thr"]["0.3"]["p95"],
                          density_ratio=v["density_ratio"] if v else "", events_in_imo_pct=100 * v["frac_events_in_imo"] if v else ""))
-    print(f"{'sekwencja':28s} {'klatek':>7s} {'IMO śr.%':>9s} {'IMO p95%':>9s} {'klatki z IMO %':>15s} {'gęstość IMO/tło':>16s}")
+    print(f"{'sekwencja':28s} {'klatek':>7s} {'IMO śr.%':>9s} {'IMO p95%':>9s} {'v>0.05 śr.%':>12s} {'v>0.1 śr.%':>11s} {'v>0.1 p95%':>11s} {'v>0.3 śr.%':>11s} {'v>0.3 p95%':>11s} {'klatki z IMO %':>15s} {'gęstość IMO/tło':>16s}")
     for r in rows:
         dr = f"{r['density_ratio']:.1f}x" if r["density_ratio"] != "" else "-"
-        print(f"{r['sequence']:28s} {r['frames']:7d} {r['imo_mean_pct']:9.2f} {r['imo_p95_pct']:9.2f} {r['frames_with_imo_pct']:15.0f} {dr:>16s}")
+        print(f"{r['sequence']:28s} {r['frames']:7d} {r['imo_mean_pct']:9.2f} {r['imo_p95_pct']:9.2f} {r['imo_v_only_mean_pct']:12.2f} "
+              f"{r['imo_v01_mean_pct']:11.2f} {r['imo_v01_p95_pct']:11.2f} {r['imo_v03_mean_pct']:11.2f} {r['imo_v03_p95_pct']:11.2f} "
+              f"{r['frames_with_imo_pct']:15.0f} {dr:>16s}")
     print("\nRozkład prędkości obiektów (wszystkie sekwencje, wszystkie klatki):")
     print(hist_line(np.concatenate(allv), V_EDGES, "v [m/s]"))
     print(hist_line(np.concatenate(allw), W_EDGES, "ω [rad/s]"))
