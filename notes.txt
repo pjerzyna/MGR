@@ -1,3 +1,22 @@
+Do mojej magisterki moim zdaniem (po ocenie wizualnej) nadadzą się:
+Z SEKCJI EVAL:
+- scene14_dyn_test_05_000000
+- scene14_dyn_test_04_000000
+- scene14_dyn_test_03_000000
+- scene13_dyn_test_05_000000
+Z SEKCJI TRAIN:
+- scene13_dyn_test_01_000000
+- scene13_dyn_test_02_000000
+- scene13_dyn_test_03_000000
+- scene14_dyn_test_01_000000
+- scene14_dyn_test_02_000000
+- scene15_dyn_test_00_000000
+- scene15_dyn_test_04_000000
+Zaproponowane przez czata, gdzie jest praktyczny brak rotacji (żeby mieć referencję):
+- scene15_dyn_test_03_000000
+
+
+
 Dane dla sekwencji scene15_dyn_test_00_000000:
 
 Zdarzenia: 12,566,770 | 0.016668 .. 6.537270 s (6.521 s)

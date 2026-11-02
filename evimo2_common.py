@@ -1,4 +1,6 @@
 """Wspólne funkcje pomocnicze dla narzędzi EVIMO2 (wczytywanie, przeszukiwanie meta)."""
+import glob
+import json
 import os
 import re
 from pathlib import Path
@@ -131,3 +133,16 @@ def find_result_file(seq_name, filename, out_root=None):
         if (c / filename).is_file():
             return c / filename
     return None
+
+
+def lag_const_loo(out_root, seq_name, fallback):
+    """Stałe opóźnienie IMU dla zbioru: mediana d_GT z INNYCH sekwencji o wiarygodnej kalibracji
+    (residuum < 15%), czyli bez sekwencji ocenianej (leave-one-out). Zwraca (wartość [s], liczba sekwencji);
+    przy < 3 sekwencjach zwraca (fallback, 0)."""
+    root = Path(out_root) if out_root else default_out_root()
+    lags = []
+    for f in sorted(glob.glob(str(root / "*" / "gyro_vs_gt.json"))):
+        j = json.load(open(f))
+        if j.get("sequence") != seq_name and j.get("residual_rel", 1.0) < 0.15:
+            lags.append(float(j["lag_s"]))
+    return (float(np.median(lags)), len(lags)) if len(lags) >= 3 else (fallback, 0)

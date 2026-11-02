@@ -8,7 +8,8 @@ Użycie:
 Dla okien zdarzeń wokół klatek z maską porównuje kilka wariantów OPÓŹNIENIA IMU (parametr wejściowy
 algorytmu; kalibracja R i bias - stałe zestawu z rotcomp.py):
   * oracle d_GT       - opóźnienie z gyro_vs_gt.json dla tej sekwencji (GÓRNA GRANICA, nie realistyczny wariant),
-  * stałe d           - jedna wartość dla całego zbioru (mediana, domyślnie -15,7 ms),
+  * stałe d           - jedna wartość dla całego zbioru: mediana d_GT z INNYCH sekwencji (leave-one-out;
+                        bez co najmniej 3 innych sekwencji z gyro_vs_gt.json: -15,7 ms),
   * zero              - brak korekty opóźnienia,
   * oracle +-5/10/25 ms - sztucznie wstrzyknięty błąd opóźnienia.
 Metryki (GT służy WYŁĄCZNIE do oceny):
@@ -41,11 +42,14 @@ def main():
     ap.add_argument("--window-ms", type=float, default=30.0)
     ap.add_argument("--max-windows", type=int, default=40)
     ap.add_argument("--calib", choices=["fixed", "json"], default="fixed")
-    ap.add_argument("--lag-const-ms", type=float, default=rc.LAG_CONST_S * 1e3)
+    ap.add_argument("--lag-const-ms", type=float, default=None,
+                    help="stałe opóźnienie [ms] (domyślnie mediana d_GT z INNYCH sekwencji w $EVIMO2_OUT)")
     ap.add_argument("--slow-v", type=float, default=0.05)
     ap.add_argument("--fast-v", type=float, default=0.3)
     ap.add_argument("--w-thr", type=float, default=1.0)
     ap.add_argument("--dilate", type=int, default=6)
+    ap.add_argument("--hi-px", type=float, default=2.0,
+                    help="okna z p95 przemieszczenia od ego-rotacji (bez kompensacji) >= tej wartości liczone osobno")
     ap.add_argument("--min-events", type=int, default=5000)
     ap.add_argument("--min-fast-events", type=int, default=2000)
     ap.add_argument("--cls", default="R*S", choices=om.CLASSES)
@@ -99,7 +103,11 @@ def main():
     modes = []
     if d_oracle is not None:
         modes.append((f"oracle d_GT = {d_oracle * 1e3:+.1f} ms", d_oracle))
-    modes.append((f"stałe d = {a.lag_const_ms:+.1f} ms", a.lag_const_ms * 1e-3))
+    if a.lag_const_ms is not None:
+        d_const, n_const = a.lag_const_ms * 1e-3, -1
+    else:
+        d_const, n_const = ec.lag_const_loo(a.out_root, seq.name, rc.LAG_CONST_S)
+    modes.append((f"stałe d = {d_const * 1e3:+.1f} ms" + (f" (mediana z {n_const} innych)" if n_const > 0 else ""), d_const))
     modes.append(("zero d = 0", 0.0))
     if d_oracle is not None:
         for e in (5, 10, 25):
@@ -164,8 +172,27 @@ def main():
         r = res[name]
         print(f"{name:28s} {med(r['p50']):9.2f} {med(r['p95']):9.2f} {med(r['gB']):9.2f} {med(r['gI']):9.2f}")
         out["modes"][name] = dict(lag_ms=d * 1e3, err_p50=med(r["p50"]), err_p95=med(r["p95"]), gain_bg=med(r["gB"]), gain_imo=med(r["gI"]))
+    rp95 = np.array(raw["p95"])
+    hi = rp95 >= a.hi_px
+    print("\nRozkład ego-rotacji po oknach (p95 przemieszczenia bez kompensacji): "
+          + ", ".join(f">= {th:g} px: {100 * np.mean(rp95 >= th):.0f}% okien" for th in (1.0, 2.0, 5.0)))
+    out["strata"] = dict(hi_px=a.hi_px, windows_hi=int(hi.sum()), share_hi=float(hi.mean()), modes={})
+    if hi.sum() >= 3:
+        print(f"\nOkna z wyraźną ego-rotacją (bez kompensacji p95 >= {a.hi_px:g} px): {int(hi.sum())} z {n_w}")
+        print(f"{'wariant':28s} {'błąd p50':>9s} {'błąd p95':>9s} {'p95/surowe':>11s}")
+        raw_hi = med(rp95[hi])
+        print(f"{'bez kompensacji (vs GT)':28s} {med(np.array(raw['p50'])[hi]):9.2f} {raw_hi:9.2f} {1.0:11.2f}")
+        for name, d in modes:
+            e50, e95 = np.array(res[name]["p50"])[hi], np.array(res[name]["p95"])[hi]
+            print(f"{name:28s} {med(e50):9.2f} {med(e95):9.2f} {med(e95) / raw_hi:11.2f}")
+            out["strata"]["modes"][name] = dict(err_p50=med(e50), err_p95=med(e95), ratio_p95_to_raw=med(e95) / raw_hi)
+    else:
+        print(f"\n(Za mało okien z ego-rotacją >= {a.hi_px:g} px do osobnego zestawienia: {int(hi.sum())}.)")
+    out["per_window"] = dict(raw_p50=[float(x) for x in raw["p50"]], raw_p95=[float(x) for x in raw["p95"]],
+                             modes={n: dict(p50=[float(x) for x in res[n]["p50"]], p95=[float(x) for x in res[n]["p95"]]) for n, _ in modes})
     print("\nBłąd mierzy tylko niedokładność rotacji z IMU (kalibracja, bias, opóźnienie, szum); nie obejmuje translacji ani ruchu obiektów."
-          "\n'Zysk tło' < 'orientacja z GT' pokazuje, ile ostrości traci się przez błędy IMU; sam zysk z GT jest ograniczony przez translację kamery.")
+          "\nZysk ostrości jest słabą miarą przy małych przemieszczeniach (okna 30 ms): bywa ~1 nawet dla orientacji z GT."
+          "\nBłędy wszystkich wariantów zbiegają do wspólnej wartości w oknach z małą rotacją - to dolna granica pomiaru (szum GT i żyroskopu).")
     if d_oracle is None:
         print("\n[UWAGA] brak gyro_vs_gt.json: pominięto warianty oracle (potrzebne opóźnienie z GT).")
     odir = Path(a.out) if a.out else ec.result_dir(seq.name, a.out_root)
