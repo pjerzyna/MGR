@@ -18,12 +18,14 @@ Brak parametrów uczonych ani GT w detekcji. Model zakłada czysty obrót: trans
 niespójność proporcjonalną do paralaksy (znane ograniczenie v0).
 
 Ocena na poziomie zdarzeń (GT: maski, pozy -> prędkości z imo_labels.py; tylko do oceny):
+  etykiety zdarzeń (--gt-mode temporal, domyślnie): każde zdarzenie dostaje etykietę z maski NAJBLIŻSZEJ w czasie
+  klatki (<= 12 ms); --gt-mode center używa jednej maski w środku okna (zaniża FPR/czułość dla szybkich obiektów).
   pozytywne = zdarzenia w masce SZYBKICH IMO (v > 0,3 m/s, maska + 6 px), negatywne = poza maską
   wszystkich obiektów ruchomych (v > 0,05 m/s lub omega > 1 rad/s); zdarzenia w maskach obiektów powolnych są pomijane.
   czułość = TP/P, FPR = FP/N, precyzja = TP/(TP+FP), IoU zdarzeń = TP/(P + FP) (suma po oknach z >= --min-pos
   pozytywnymi; FPR po wszystkich oknach). Warianty: brak kompensacji, oracle d_GT, stałe d (mediana opóźnień
   z INNYCH sekwencji w $EVIMO2_OUT), zero. Wyniki osobno dla okien z wyraźną ego-rotacją (p95 > --hi-px).
---grid: zamiast jednego zestawu parametrów liczy siatkę blur {1,2,3} x tau {0,4; 0,5; 0,6} (bez wariantu zero) -
+--grid: zamiast jednego zestawu parametrów liczy siatkę --grid-blur x --grid-tau (domyślnie {3,4,5,6,8} x {0,2; 0,3; 0,4}; warianty: brak kompensacji, stałe) -
 pokazuje kompromis między czułością a odpornością na błędy kompensacji (drobne rozmycie = większa czułość,
 ale większe wymagania co do dokładności kompensacji).
 Zapisuje <out>/imo_detect.json.
@@ -40,6 +42,7 @@ import evimo2_common as ec
 import imo_labels as il
 import object_motion as om
 import rotcomp as rc
+from event_lag_check import gt_speed_series, spearman, window_features
 from gyro_vs_gt import unify_hemisphere
 from survey_sequences import pose_series
 
@@ -116,11 +119,70 @@ def detect(xs, ys, te, tc, a):
     return np.isin(lab_ev, keep), len(keep)
 
 
+# ---------- wizualizacja ----------
+def render_events(x, y, posm, negm, pred):
+    """Obraz zdarzeń we współrzędnych czujnika: TP zielony, FP czerwony, FN niebieski, TN szary, pominięte pomarańczowy."""
+    img = np.ones((480, 640, 3), np.float32)
+    amb, tn = ~posm & ~negm, negm & ~pred
+    fn, fp, tp = posm & ~pred, negm & pred, posm & pred
+    for m, c in ((amb, (1.0, 0.85, 0.5)), (tn, (0.82, 0.82, 0.82)), (fn, (0.1, 0.3, 0.95)), (fp, (0.9, 0.1, 0.1)), (tp, (0.1, 0.65, 0.2))):
+        img[y[m], x[m]] = c
+    return img
+
+
+def save_viz(store, a, odir, names):
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("Brak matplotlib - pominięto wizualizacje.")
+        return
+    vdir = odir / "imo_detect_viz"
+    vdir.mkdir(parents=True, exist_ok=True)
+    pick = sorted(set(np.linspace(0, len(store) - 1, min(a.viz, len(store))).astype(int).tolist()))
+    for i in pick:
+        w = store[i]
+        fig, axes = plt.subplots(1, len(names), figsize=(6.4 * len(names), 4.9))
+        for ax, nm in zip(np.atleast_1d(axes), names):
+            pred = w["pred"][nm]
+            tp, fp = int((pred & w["pos"]).sum()), int((pred & w["neg"]).sum())
+            rec = tp / max(int(w["pos"].sum()), 1)
+            fpr = fp / max(int(w["neg"].sum()), 1)
+            ax.imshow(render_events(w["x"], w["y"], w["pos"], w["neg"], pred), interpolation="nearest")
+            ax.set_title(f"{nm[:34]}\nczułość {rec:.2f}, FPR {fpr:.3f}", fontsize=10)
+            ax.set_xticks([]); ax.set_yticks([])
+        fig.suptitle(f"{w['seq']} | klatka {w['fid']} | t = {w['ts']:.3f} s | zielony TP, czerwony FP, niebieski FN, "
+                     "szary TN, pomarańczowy pominięte (powolne obiekty)", fontsize=9)
+        fig.savefig(vdir / f"win_{w['fid']:05d}.png", dpi=110, bbox_inches="tight")
+        plt.close(fig)
+    print(f"Zapisano {len(pick)} wizualizacji do {vdir}/")
+
+
 # ---------- ocena ----------
+def regions_for_frame(z, fid, tsf, kin, a):
+    """Maski GT: (obiekty ruchome v > slow_v lub omega > w_thr, rozszerzone) i (szybkie v > fast_v, rozszerzone)."""
+    lab = z[f"mask_{fid:010d}"] // 1000
+    slow, fast = [], []
+    for oid in np.unique(lab[lab > 0]):
+        k = str(int(oid))
+        if k not in kin:
+            continue
+        v = float(np.interp(tsf, kin[k]["ts"], kin[k]["v"])); w = float(np.interp(tsf, kin[k]["ts"], kin[k]["w"]))
+        if v > a.slow_v or w > a.w_thr:
+            slow.append(int(oid))
+        if v > a.fast_v:
+            fast.append(int(oid))
+    excl = il.dilate(np.isin(lab, slow), a.dilate) if slow else np.zeros(lab.shape, bool)
+    fmask = il.dilate(np.isin(lab, fast), a.dilate) if fast else np.zeros(lab.shape, bool)
+    return excl, fmask
+
+
+
 class Acc:
     def __init__(self):
         self.tp = self.fp = self.p = self.n = 0
-        self.det_tp = self.det_fp = self.det_p = 0
+        self.det_fp = self.det_n = 0
         self.comps = []
         self.w_recall = []
 
@@ -128,7 +190,7 @@ class Acc:
         self.n += n; self.fp += fp
         self.comps.append(comps)
         if p >= min_pos:
-            self.tp += tp; self.p += p; self.det_fp += fp; self.w_recall.append(tp / p)
+            self.tp += tp; self.p += p; self.det_fp += fp; self.det_n += n; self.w_recall.append(tp / p)
 
     def metrics(self):
         r = lambda x: float(x)
@@ -137,7 +199,7 @@ class Acc:
         iou = self.tp / (self.p + self.det_fp) if self.p else float("nan")
         fpr = self.fp / self.n if self.n else float("nan")
         return dict(recall=rec, precision=prec, iou=iou, fpr=fpr, comps_median=float(np.median(self.comps)) if self.comps else float("nan"),
-                    windows_det=len(self.w_recall))
+                    windows_det=len(self.w_recall), base_rate=(self.p / self.det_n) if self.det_n else float("nan"))
 
 
 def main():
@@ -156,7 +218,13 @@ def main():
     ap.add_argument("--fast-v", type=float, default=0.3)
     ap.add_argument("--w-thr", type=float, default=1.0)
     ap.add_argument("--dilate", type=int, default=6)
+    ap.add_argument("--gt-mode", choices=["temporal", "center"], default="temporal",
+                    help="etykiety zdarzeń: z maski NAJBLIŻSZEJ w czasie klatki (temporal) albo z jednej maski w środku okna (center)")
     ap.add_argument("--grid", action="store_true", help="siatka blur x tau dla wariantów: brak kompensacji, oracle, stałe")
+    ap.add_argument("--grid-blur", type=int, nargs="+", default=[3, 4, 5, 6, 8], help="promienie rozmycia w --grid")
+    ap.add_argument("--grid-tau", type=float, nargs="+", default=[0.2, 0.3, 0.4], help="progi tau w --grid")
+    ap.add_argument("--viz", type=int, default=0,
+                    help="zapisz tyle wizualizacji okien (zdarzenia: TP/FP/FN/TN, bez kompensacji vs stałe d) do <out>/imo_detect_viz/")
     ap.add_argument("--min-events", type=int, default=5000)
     ap.add_argument("--cls", default="R*S", choices=om.CLASSES)
     ap.add_argument("--out", default=None)
@@ -195,6 +263,7 @@ def main():
     if not mpath.is_file():
         sys.exit("brak dataset_mask.npz")
     z = np.load(mpath)
+    zfiles = set(z.files)
     frames = sorted((fid, fts[fid]) for fid in (int(k.split("_")[-1]) for k in z.files) if fid in fts and lo <= fts[fid] <= hi_t)
     if not frames:
         sys.exit("brak klatek z maską w dopuszczalnym przedziale czasu")
@@ -207,47 +276,59 @@ def main():
     label_const = f"stałe d = {d_const * 1e3:+.1f} ms" + (f" (mediana z {n_const} innych)" if n_const > 0 else "")
     modes += [(label_const, d_const), ("zero d = 0", 0.0)]
     if a.grid:
-        psets = [(b, t) for b in (1, 2, 3) for t in (0.4, 0.5, 0.6)]
-        modes = [m for m in modes if not m[0].startswith("zero")]
+        psets = [(b, t) for b in a.grid_blur for t in a.grid_tau]
+        modes = [m for m in modes if m[0] == "brak kompensacji" or m[0].startswith("stałe")]
     else:
         psets = [(a.blur, a.tau)]
     acc = {(name, ps): dict(all=Acc(), hi=Acc()) for name, _ in modes for ps in psets}
     n_win = n_hi = n_det = 0
+    speed = gt_speed_series(info)
+    wrec = []                                    # cechy ego-ruchu i FPR okna (do korelacji)
+    vstore = []                                  # okna do wizualizacji (--viz)
+    viz_names = [m[0] for m in modes if m[0] == "brak kompensacji" or m[0].startswith("stałe")]
 
     for fid, tsf in frames:
         win = rc.prep_window(tsf, W, t_ev, xy_ev, intr)
         if win["n"] < a.min_events:
             continue
-        lab = z[f"mask_{fid:010d}"] // 1000
-        slow, fast = [], []
-        for oid in np.unique(lab[lab > 0]):
-            k = str(int(oid))
-            if k not in kin:
-                continue
-            v = float(np.interp(tsf, kin[k]["ts"], kin[k]["v"])); w = float(np.interp(tsf, kin[k]["ts"], kin[k]["w"]))
-            if v > a.slow_v or w > a.w_thr:
-                slow.append(int(oid))
-            if v > a.fast_v:
-                fast.append(int(oid))
-        excl = il.dilate(np.isin(lab, slow), a.dilate) if slow else np.zeros(lab.shape, bool)
-        fmask = il.dilate(np.isin(lab, fast), a.dilate) if fast else np.zeros(lab.shape, bool)
-        x = np.clip(win["pix"][:, 0].astype(int), 0, lab.shape[1] - 1)
-        y = np.clip(win["pix"][:, 1].astype(int), 0, lab.shape[0] - 1)
-        negm, posm = ~excl[y, x], fmask[y, x]
+        x = np.clip(win["pix"][:, 0].astype(int), 0, 639)
+        y = np.clip(win["pix"][:, 1].astype(int), 0, 479)
+        if a.gt_mode == "center":
+            excl, fmask = regions_for_frame(z, fid, tsf, kin, a)
+            negm, posm = ~excl[y, x], fmask[y, x]
+        else:                                    # każde zdarzenie dostaje etykietę z najbliższej w czasie klatki z maską
+            cand = [f for f in (fid - 1, fid, fid + 1) if f in fts and f"mask_{f:010d}" in zfiles]
+            ts_c = np.array([fts[f] for f in cand])
+            regs = [regions_for_frame(z, f, fts[f], kin, a) for f in cand]
+            ex, fm = np.stack([r[0] for r in regs]), np.stack([r[1] for r in regs])
+            dd = np.abs(win["te"][:, None] - ts_c[None, :])
+            fi, valid = dd.argmin(1), dd.min(1) <= 0.012
+            negm, posm = (~ex[fi, y, x]) & valid, fm[fi, y, x] & valid
         n_pos, n_neg = int(posm.sum()), int(negm.sum())
         x0, y0 = rc.warp(win, cal_ts, cal_w, None)
         xg, yg = rc.gt_warp(win, ts_gt, q_gt)
         is_hi = np.percentile(np.hypot(x0 - xg, y0 - yg), 95) >= a.hi_px
         n_win += 1; n_hi += int(is_hi); n_det += int(n_pos >= a.min_pos)
+        rec = dict(raw_p95=float(np.percentile(np.hypot(x0 - xg, y0 - yg), 95)), n_neg=n_neg,
+                   v_cam=window_features(tsf, W, speed, cal_ts, cal_w, float(intr["fx"]), 1.0).get("v_mps", float("nan")), fpr={})
+        wrec.append(rec)
+        vrec = dict(seq=seq.name, fid=fid, ts=tsf, x=x.astype(np.int16), y=y.astype(np.int16), pos=posm, neg=negm, pred={}) \
+            if (a.viz and len(psets) == 1 and n_pos >= a.min_pos) else None
         for name, d in modes:
             xs, ys = (x0, y0) if d is None else rc.warp(win, cal_ts, cal_w, d)
             for ps in psets:
                 pa = argparse.Namespace(blur=ps[0], tau=ps[1], support=a.support, min_cells=a.min_cells)
                 pred, comps = detect(xs, ys, win["te"], tsf, pa)
                 tp, fp = int((pred & posm).sum()), int((pred & negm).sum())
+                if len(psets) == 1 and n_neg >= 2000:
+                    rec["fpr"][name] = fp / n_neg
+                if vrec is not None and name in viz_names:
+                    vrec["pred"][name] = pred
                 acc[(name, ps)]["all"].add(tp, fp, n_pos, n_neg, comps, a.min_pos)
                 if is_hi:
                     acc[(name, ps)]["hi"].add(tp, fp, n_pos, n_neg, comps, a.min_pos)
+        if vrec is not None:
+            vstore.append(vrec)
 
     if n_win == 0:
         sys.exit("żadne okno nie miało dość zdarzeń")
@@ -263,12 +344,20 @@ def main():
         out["params"].update(blur=ps[0], tau=ps[1])
         for stratum, title in strata:
             print(title)
-            print(f"{'wariant':40s} {'czułość':>8s} {'precyzja':>9s} {'IoU zdarz.':>11s} {'FPR tło':>8s} {'skł./okno':>10s} {'okien det.':>11s}")
+            print(f"{'wariant':40s} {'czułość':>8s} {'precyzja':>9s} {'IoU zdarz.':>11s} {'FPR tło':>8s} {'skł./okno':>10s} {'okien det.':>11s} {'P/N':>6s}")
             for name, _ in modes:
                 m = acc[(name, ps)][stratum].metrics()
                 out["modes"].setdefault(name, {})[stratum] = m
-                print(f"{name:40s} {m['recall']:8.2f} {m['precision']:9.2f} {m['iou']:11.2f} {m['fpr']:8.3f} {m['comps_median']:10.1f} {m['windows_det']:11d}")
+                print(f"{name:40s} {m['recall']:8.2f} {m['precision']:9.2f} {m['iou']:11.2f} {m['fpr']:8.3f} {m['comps_median']:10.1f} {m['windows_det']:11d} {m['base_rate']:6.3f}")
             print()
+        print("P/N = stosunek liczby zdarzeń pozytywnych (szybkie IMO) do negatywnych w oknach detekcji: przy P/N rzędu 0,05 nawet FPR 5% daje precyzję poniżej 0,5.")
+        for name, _ in modes:
+            pts = [(r["fpr"][name], r["raw_p95"], r["v_cam"]) for r in wrec if name in r["fpr"] and np.isfinite(r["v_cam"])]
+            if len(pts) >= 8:
+                f_, rr, vv = ([p[i] for p in pts] for i in range(3))
+                out["modes"][name]["fpr_corr"] = dict(n=len(pts), vs_raw_rotation=spearman(f_, rr), vs_cam_speed=spearman(f_, vv))
+                print(f"FPR okna vs ego-ruch [{name[:24]}]: Spearman z ego-rotacją (p95 px) = {spearman(f_, rr):+.2f}, "
+                      f"z prędkością kamery |v| = {spearman(f_, vv):+.2f} (n = {len(pts)}, próg istotności ok. ±{2 / np.sqrt(len(pts)):.2f})")
     else:
         print("Siatka parametrów (blur = promień rozmycia, tau = próg niespójności); czułość/IoU: okna z szybkimi IMO, FPR: wszystkie okna.\n")
         for stratum, title in strata:
@@ -288,6 +377,8 @@ def main():
     odir = Path(a.out) if a.out else ec.result_dir(seq.name, a.out_root)
     odir.mkdir(parents=True, exist_ok=True)
     (odir / "imo_detect.json").write_text(json.dumps(out, indent=1))
+    if a.viz and vstore:
+        save_viz(vstore, a, odir, viz_names)
     print(f"Zapisano {odir / 'imo_detect.json'}")
 
 
