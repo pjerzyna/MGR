@@ -12,8 +12,9 @@ Algorytm (dla okna zdarzeń o środku t_c i długości W):
   3. mapa niespójności  D = |E - L| / (E + L): tło statyczne po kompensacji pokrywa się w obu połowach
      (D ~ 0), obiekt poruszający się niezależnie przesuwa się (D ~ 1),
   4. maska = (D >= --tau) i (E + L >= --support * średnia): odrzuca szum o małej gęstości,
-  5. klasteryzacja: składowe spójne (8-sąsiedztwo) na siatce komórek 4x4 px, odrzucenie składowych
-     mniejszych niż --min-cells komórek; zdarzenie jest IMO, gdy leży w zachowanej składowej.
+  5. klasteryzacja: składowe spójne (8-sąsiedztwo) na siatce komórek 4x4 px (opcjonalnie po domknięciu --close),
+     odrzucenie składowych mniejszych niż --min-cells komórek; zdarzenie jest IMO, gdy leży w zachowanej
+     składowej (--fill: także w jej wnętrzu, tj. w dziurach otoczonych obrysem).
 Brak parametrów uczonych ani GT w detekcji. Model zakłada czysty obrót: translacja kamery daje w tle
 niespójność proporcjonalną do paralaksy (znane ograniczenie v0).
 
@@ -97,6 +98,28 @@ def label_cc(g):
     return lab, np.array(areas)
 
 
+def fill_holes(g):
+    """Wypełnia dziury maski logicznej (komórki tła niedostępne z brzegu siatki, 4-sąsiedztwo)."""
+    H, W = g.shape
+    reach = np.zeros_like(g, bool)
+    q = deque()
+    for y in range(H):
+        for x in (0, W - 1):
+            if not g[y, x] and not reach[y, x]:
+                reach[y, x] = True; q.append((y, x))
+    for x in range(W):
+        for y in (0, H - 1):
+            if not g[y, x] and not reach[y, x]:
+                reach[y, x] = True; q.append((y, x))
+    while q:
+        y, x = q.popleft()
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            yy, xx = y + dy, x + dx
+            if 0 <= yy < H and 0 <= xx < W and not g[yy, xx] and not reach[yy, xx]:
+                reach[yy, xx] = True; q.append((yy, xx))
+    return g | ~reach
+
+
 def detect(xs, ys, te, tc, a):
     """Etykieta IMO dla każdego zdarzenia i liczba zachowanych składowych."""
     pred = np.zeros(len(xs), bool)
@@ -107,26 +130,41 @@ def detect(xs, ys, te, tc, a):
     m = (D >= a.tau) & (S >= a.support * S.mean())
     H, W = m.shape
     g = m.reshape(H // CELL, CELL, W // CELL, CELL).mean(axis=(1, 3)) >= 0.3
+    close = getattr(a, "close", 0)
+    if close:                                          # domknięcie: dylatacja, potem erozja (kwadrat, close komórek)
+        g = ~il.dilate(~il.dilate(g, close), close)
     lab, areas = label_cc(g)
     keep = np.nonzero(areas >= a.min_cells)[0]
     keep = keep[keep > 0]
     if len(keep) == 0:
         return pred, 0
+    kept = np.isin(lab, keep)
+    if getattr(a, "fill", False):                      # wnętrza obiektów otoczonych wykrytym obrysem
+        kept = fill_holes(kept)
     cx, cy = np.floor(xs / CELL).astype(int), np.floor(ys / CELL).astype(int)
     ok = (cx >= 0) & (cx < g.shape[1]) & (cy >= 0) & (cy < g.shape[0])
-    lab_ev = np.zeros(len(xs), np.int32)
-    lab_ev[ok] = lab[cy[ok], cx[ok]]
-    return np.isin(lab_ev, keep), len(keep)
+    pred = np.zeros(len(xs), bool)
+    pred[ok] = kept[cy[ok], cx[ok]]
+    return pred, len(keep)
 
 
 # ---------- wizualizacja ----------
-def render_events(x, y, posm, negm, pred):
+def outline(m):
+    """Brzeg maski logicznej (piksele maski sąsiadujące z tłem)."""
+    return m & ~(~il.dilate(~m, 1))
+
+
+def render_events(x, y, posm, negm, pred, fm=None, ex=None):
     """Obraz zdarzeń we współrzędnych czujnika: TP zielony, FP czerwony, FN niebieski, TN szary, pominięte pomarańczowy."""
     img = np.ones((480, 640, 3), np.float32)
     amb, tn = ~posm & ~negm, negm & ~pred
     fn, fp, tp = posm & ~pred, negm & pred, posm & pred
     for m, c in ((amb, (1.0, 0.85, 0.5)), (tn, (0.82, 0.82, 0.82)), (fn, (0.1, 0.3, 0.95)), (fp, (0.9, 0.1, 0.1)), (tp, (0.1, 0.65, 0.2))):
         img[y[m], x[m]] = c
+    if ex is not None:
+        img[outline(ex)] = (0.75, 0.1, 0.75)              # obrys obiektów ruchomych (v > 0,05 m/s), fiolet
+    if fm is not None:
+        img[outline(fm)] = (0.0, 0.0, 0.0)                # obrys szybkich IMO (v > 0,3 m/s), czerń
     return img
 
 
@@ -149,12 +187,12 @@ def save_viz(store, a, odir, names):
             tp, fp = int((pred & w["pos"]).sum()), int((pred & w["neg"]).sum())
             rec = tp / max(int(w["pos"].sum()), 1)
             fpr = fp / max(int(w["neg"].sum()), 1)
-            ax.imshow(render_events(w["x"], w["y"], w["pos"], w["neg"], pred), interpolation="nearest")
+            ax.imshow(render_events(w["x"], w["y"], w["pos"], w["neg"], pred, w.get("fm"), w.get("ex")), interpolation="nearest")
             ax.set_title(f"{nm[:34]}\nczułość {rec:.2f}, FPR {fpr:.3f}", fontsize=10)
             ax.set_xticks([]); ax.set_yticks([])
         fig.suptitle(f"{w['seq']} | klatka {w['fid']} | t = {w['ts']:.3f} s | zielony TP, czerwony FP, niebieski FN, "
-                     "szary TN, pomarańczowy pominięte (powolne obiekty)", fontsize=9)
-        fig.savefig(vdir / f"win_{w['fid']:05d}.png", dpi=110, bbox_inches="tight")
+                     "szary TN, pomarańczowy pominięte (powolne obiekty); obrys: czarny = szybkie IMO, fiolet = wszystkie ruchome (maski GT)", fontsize=8)
+        fig.savefig(vdir / f"win_{ec.seq_label(w['seq'])}_{w['fid']:05d}.png", dpi=110, bbox_inches="tight")
         plt.close(fig)
     print(f"Zapisano {len(pick)} wizualizacji do {vdir}/")
 
@@ -225,6 +263,8 @@ def main():
     ap.add_argument("--grid-tau", type=float, nargs="+", default=[0.2, 0.3, 0.4], help="progi tau w --grid")
     ap.add_argument("--viz", type=int, default=0,
                     help="zapisz tyle wizualizacji okien (zdarzenia: TP/FP/FN/TN, bez kompensacji vs stałe d) do <out>/imo_detect_viz/")
+    ap.add_argument("--fill", action="store_true", help="wypełniaj dziury w wykrytych składowych (wnętrza obiektów otoczone obrysem)")
+    ap.add_argument("--close", type=int, default=0, help="domknięcie morfologiczne maski przed klasteryzacją [komórki 4x4 px]")
     ap.add_argument("--min-events", type=int, default=5000)
     ap.add_argument("--cls", default="R*S", choices=om.CLASSES)
     ap.add_argument("--out", default=None)
@@ -295,12 +335,14 @@ def main():
         y = np.clip(win["pix"][:, 1].astype(int), 0, 479)
         if a.gt_mode == "center":
             excl, fmask = regions_for_frame(z, fid, tsf, kin, a)
+            cen_ex, cen_fm = excl, fmask
             negm, posm = ~excl[y, x], fmask[y, x]
         else:                                    # każde zdarzenie dostaje etykietę z najbliższej w czasie klatki z maską
             cand = [f for f in (fid - 1, fid, fid + 1) if f in fts and f"mask_{f:010d}" in zfiles]
             ts_c = np.array([fts[f] for f in cand])
             regs = [regions_for_frame(z, f, fts[f], kin, a) for f in cand]
             ex, fm = np.stack([r[0] for r in regs]), np.stack([r[1] for r in regs])
+            cen_ex, cen_fm = regs[cand.index(fid)] if fid in cand else regs[0]
             dd = np.abs(win["te"][:, None] - ts_c[None, :])
             fi, valid = dd.argmin(1), dd.min(1) <= 0.012
             negm, posm = (~ex[fi, y, x]) & valid, fm[fi, y, x] & valid
@@ -312,12 +354,12 @@ def main():
         rec = dict(raw_p95=float(np.percentile(np.hypot(x0 - xg, y0 - yg), 95)), n_neg=n_neg,
                    v_cam=window_features(tsf, W, speed, cal_ts, cal_w, float(intr["fx"]), 1.0).get("v_mps", float("nan")), fpr={})
         wrec.append(rec)
-        vrec = dict(seq=seq.name, fid=fid, ts=tsf, x=x.astype(np.int16), y=y.astype(np.int16), pos=posm, neg=negm, pred={}) \
+        vrec = dict(seq=seq.name, fid=fid, ts=tsf, x=x.astype(np.int16), y=y.astype(np.int16), pos=posm, neg=negm, pred={}, ex=cen_ex, fm=cen_fm) \
             if (a.viz and len(psets) == 1 and n_pos >= a.min_pos) else None
         for name, d in modes:
             xs, ys = (x0, y0) if d is None else rc.warp(win, cal_ts, cal_w, d)
             for ps in psets:
-                pa = argparse.Namespace(blur=ps[0], tau=ps[1], support=a.support, min_cells=a.min_cells)
+                pa = argparse.Namespace(blur=ps[0], tau=ps[1], support=a.support, min_cells=a.min_cells, fill=a.fill, close=a.close)
                 pred, comps = detect(xs, ys, win["te"], tsf, pa)
                 tp, fp = int((pred & posm).sum()), int((pred & negm).sum())
                 if len(psets) == 1 and n_neg >= 2000:

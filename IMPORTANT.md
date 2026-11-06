@@ -85,3 +85,14 @@
 - Korelacja FPR okna z ego-ruchem (Spearman): scene13_01 z prędkością kamery +0,75 bez kompensacji i +0,78 po kompensacji (próg ±0,32; translacja/paralaksa istotnie wpływa na FPR); scene14_05 bez kompensacji +0,60 (rotacja), po kompensacji +0,26/+0,28 (poniżej progu); scene14_04 ≈ 0. Wpływ translacji jest sekwencyjnie zależny.
 - Siatka (scene14_05, stałe d): IoU rośnie z rozmyciem i maleje z tau do krawędzi siatki; najlepsze w siatce rozmycie 5, tau 0,3: IoU 0,25 (czułość 0,44, FPR 0,081, precyzja ok. 0,43 z P/N = 0,137); bez kompensacji przy tych samych parametrach 0,11 (kompensacja ×2,3); w oknach z rotacją 0,06 → 0,16. Parametry dobrane na jednej sekwencji - wymagają potwierdzenia na innych.
 - scene6_03 (nieruchoma kamera): czułość 0,14 przy precyzji 0,92 i P/N = 4,9 - czułość ograniczona przez detektor, nie przez ego-ruch.
+
+## Co trzeba zrobić
+- Trzeba napisać program, który wizualizuje GT co do tego co się rusza a co nie. Mam już podobną funkcjonalność, ale ona nakłada wszystko na wszystko (TP, FP, TN, FN), a chciałbym mieć wizualizację czystego TP z mojego Ground Truth. 
+
+## Wnoski nt. wizualizacji i ego-motion
+- Wizualizacje (scene6_03, klatki 42–97): FPR na klatkę zwykle 0,000–0,030; wyjątek klatka 56 (0,092): łańcuch kresek obrzeża planszy poza maską GT → prawdopodobnie niekompletność masek GT (wniosek z jednej klatki; sprawdzić obrysami masek --viz). Główny problem to czułość: trafiony jest obrys obiektów, wnętrza (niebieskie, FN) nie; w klatce 42 cały obiekt pominięty. Duża część ruchomych struktur jest pomijana jako 'powolne' (v < 0,3 m/s).
+- Wizualizacje (scene14_05): kompensacja rotacji czyści obraz (FPR okna 0,41 → 0,03, 0,51 → 0,04); pozostałe FP w klatkach 78, 91, 103 skupione na barach/pasach siatki (hipoteza: paralaksa); w klatce 66 FP niezmienione po kompensacji (0,40 → 0,39), przyczyna nie jest rotacja.
+- Siatka (scene14_05, stałe d): najlepsze IoU zdarzeń rozmycie 8, tau 0,2: 0,33 (czułość 0,52, FPR 0,072) vs 0,13 bez kompensacji (w oknach z rotacją 0,22 vs 0,07); IoU rośnie z rozmyciem do krawędzi siatki. Uwaga: IoU zdarzeń nagradza grube obszary - potrzebne IoU pikselowe z maskami do końcowej oceny segmentacji.
+- Przeniesienie parametrów rozmycie 5, tau 0,3 (dobrane na 14_05) na inne sekwencje: 14_04 IoU 0,11 → 0,16 (FPR 0,204 → 0,108), 13_01 0,11 → 0,14 (0,156 → 0,065), 15_03 0,49 (FPR 0,299 → 0,133, P/N = 1,1, brak zmiany IoU z kompensacją), 6_03 0,14 → 0,19 (kosztem FPR 0,111 → 0,205).
+- Korelacja FPR okna z prędkością kamery po kompensacji: 13_01 +0,75 (istotna), 14_05 +0,28, 14_04 −0,24, 15_03 −0,39 (ujemna, istotna), 6_03 +0,02 → wpływ translacji tylko w jednej z czterech sekwencji z ruchem.
+- Dodano --fill i --close (wypełnianie wnętrz/domknięcie): na syntetyku (dokładna kompensacja) czułość 0,33 → 0,73, ale przy błędzie opóźnienia 28 ms FPR 0,3% → 27%; wyniki na danych rzeczywistych do uzupełnienia.
