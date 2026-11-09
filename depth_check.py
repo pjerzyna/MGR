@@ -60,13 +60,13 @@ def main():
     if not ratios:
         sys.exit("brak obiektów z dodatnią głębią i pozą")
     print(f"Sekwencja: {seq.name} | klatek: {len(ids)} | par (obiekt, klatka): {len(ratios)}")
-    print(f"\\n{'id':>4} {'klatek':>7} {'mediana głębi':>14} {'z z pozy [m]':>13} {'stosunek':>9}")
+    print(f"\n{'id':>4} {'klatek':>7} {'mediana głębi':>14} {'z z pozy [m]':>13} {'stosunek':>9}")
     for k, v in sorted(per_obj.items(), key=lambda x: int(x[0])):
         d, z = np.median([p[0] for p in v]), np.median([p[1] for p in v])
         print(f"{k:>4} {len(v):7d} {d:14.1f} {z:13.3f} {d / z:9.1f}")
     med = float(np.median(ratios))
     p10, p90 = np.percentile(ratios, [10, 90])
-    print(f"\\nStosunek mediana_głębi / z_poza: mediana {med:.1f} (p10 {p10:.1f}, p90 {p90:.1f})")
+    print(f"\nStosunek mediana_głębi / z_poza: mediana {med:.1f} (p10 {p10:.1f}, p90 {p90:.1f})")
     unit = "milimetry (poza w metrach)" if 700 < med < 1400 else "metry" if 0.7 < med < 1.4 else "0,1 mm" if 7000 < med < 14000 else None
     print("Wniosek: głębia w jednostkach: " + (unit if unit else "NIEJEDNOZNACZNE (stosunek poza oczekiwanymi wartościami 1 / 1000 / 10000)"))
     print("(Zakładam, że translacje w pozach są w metrach - jeśli stosunek wychodzi 1000, to głębia jest w mm.)")
