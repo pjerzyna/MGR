@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 ROOT="$ROOT_DIR/data/raw"
 find_seq() { find -L "$ROOT" -maxdepth 2 -name "$1" -type d | head -1; }
