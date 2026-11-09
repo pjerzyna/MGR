@@ -112,8 +112,14 @@ def seq_label(name):
 
 
 def default_out_root():
-    """Katalog główny wyników: zmienna środowiskowa EVIMO2_OUT albo ./out."""
-    return Path(os.environ.get("EVIMO2_OUT", "out"))
+    """Katalog główny wyników: zmienna środowiskowa EVIMO2_OUT, ./results, ../results, ./out albo ../out."""
+    if "EVIMO2_OUT" in os.environ:
+        return Path(os.environ["EVIMO2_OUT"])
+    for cand in ("results", "../results", "out", "../out", "evimo2_viewer/out", "../evimo2_viewer/out"):
+        p = Path(cand)
+        if p.is_dir():
+            return p
+    return Path("results")
 
 
 def result_dir_candidates(seq_name, out_root=None):

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -u
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-ROOT=data/npz_left_camera_imo/left_camera/imo
-find_seq() { find "$ROOT" -maxdepth 2 -name "$1" -type d | head -1; }
+ROOT="$ROOT_DIR/data/raw"
+find_seq() { find -L "$ROOT" -maxdepth 2 -name "$1" -type d | head -1; }
 
 # Lista sekwencji do sprawdzenia
 SEKWENCJE=(
@@ -24,7 +25,6 @@ for s in "${SEKWENCJE[@]}"; do
   echo "Ścieżka: $seq_path"
   echo "============================================================"
   
-  # Wywołanie depth_check.py (opcjonalnie można dodać np. --max-frames 60)
-  python3 depth_check.py "$seq_path" --max-frames 60
+  python3 "$SCRIPT_DIR/depth_check.py" "$seq_path" --max-frames 60
   echo ""
 done
