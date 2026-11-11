@@ -42,7 +42,7 @@ inline ColorRGB get_cluster_color(int id) {
 }
 
 // 5x7 ASCII bitmap font (ASCII 32 ' ' do 95 '_')
-inline const uint8_t FONT_5X7[64][5] = {
+inline constexpr uint8_t FONT_5X7[64][5] = {
     {0x00, 0x00, 0x00, 0x00, 0x00}, /* 32: " " */
     {0x00, 0x00, 0x5f, 0x00, 0x00}, /* 33: "!" */
     {0x00, 0x07, 0x00, 0x07, 0x00}, /* 34: "\"" */
@@ -334,6 +334,44 @@ inline ImageRGB render_imo_frame(
             ++drawn;
         }
     }
+
+    // 5. Elegancka, kompaktowa legenda barw (IMO, ON, OFF) w lewym dolnym rogu
+    int leg_w = 162;
+    int leg_h = 16;
+    int leg_x = 8;
+    int leg_y = H - leg_h - 6;
+
+    ColorRGB leg_bg   = dark ? ColorRGB{20, 23, 29}  : ColorRGB{235, 238, 244};
+    ColorRGB leg_bdr  = dark ? ColorRGB{45, 52, 65}  : ColorRGB{195, 202, 214};
+    ColorRGB col_on   = dark ? ColorRGB{60, 85, 120} : ColorRGB{140, 160, 190};
+    ColorRGB col_off  = dark ? ColorRGB{100, 75, 70} : ColorRGB{190, 155, 145};
+
+    img.fill_rect(leg_x, leg_y, leg_x + leg_w, leg_y + leg_h, leg_bg);
+    img.draw_rect(leg_x, leg_y, leg_x + leg_w, leg_y + leg_h, leg_bdr, 1);
+
+    int cur_x = leg_x + 6;
+    int cy = leg_y + 4;
+
+    // IMO swatch
+    ColorRGB imo_swatch = (opt.color_mode == "clusters") ? get_cluster_color(1) : imo_unified;
+    img.fill_rect(cur_x, cy, cur_x + 7, cy + 7, imo_swatch);
+    img.draw_rect(cur_x, cy, cur_x + 7, cy + 7, dark ? ColorRGB{255, 180, 180} : ColorRGB{120, 10, 10}, 1);
+    cur_x += 11;
+    img.draw_text(cur_x, cy + 1, "IMO", text_col, 1);
+    cur_x += 28;
+
+    // ON (tło) swatch
+    img.fill_rect(cur_x, cy, cur_x + 7, cy + 7, col_on);
+    img.draw_rect(cur_x, cy, cur_x + 7, cy + 7, dark ? ColorRGB{120, 160, 220} : ColorRGB{70, 90, 130}, 1);
+    cur_x += 11;
+    img.draw_text(cur_x, cy + 1, "ON", sub_col, 1);
+    cur_x += 24;
+
+    // OFF (tło) swatch
+    img.fill_rect(cur_x, cy, cur_x + 7, cy + 7, col_off);
+    img.draw_rect(cur_x, cy, cur_x + 7, cy + 7, dark ? ColorRGB{180, 130, 120} : ColorRGB{120, 80, 70}, 1);
+    cur_x += 11;
+    img.draw_text(cur_x, cy + 1, "OFF", sub_col, 1);
 
     return img;
 }

@@ -14,6 +14,8 @@
 #include "events.hpp"
 #include "viz.hpp"
 
+using namespace evimo2;
+
 struct Args {
     std::string dir, out = "out";
     int w = 640, h = 480;

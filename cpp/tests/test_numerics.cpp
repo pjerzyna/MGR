@@ -48,7 +48,8 @@ void test_rodrigues() {
     }
 
     // Obrót o 90 stopni wokół osi Z: [0, 0, pi/2]
-    double pi_2 = M_PI / 2.0;
+    constexpr double PI_VAL = 3.14159265358979323846;
+    double pi_2 = PI_VAL / 2.0;
     Mat3 Rz90 = rodrigues(Vec3{0.0, 0.0, pi_2});
     // [ 0, -1,  0 ]
     // [ 1,  0,  0 ]

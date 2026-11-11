@@ -8,6 +8,7 @@
 
 #include "camera.hpp"
 #include "calibration.hpp"
+#include <cstdint>
 
 namespace evimo2 {
 
@@ -163,7 +164,8 @@ inline void warp(const EventWindow& win,
     std::vector<Mat3> M = rot_matrices(win, cal_ts, cal_w, n_imu, d);
     for (size_t i = 0; i < n; ++i) {
         Vec3 b2 = M[i] * win.events[i].bearing;
-        double inv_z = 1.0 / b2.z;
+        double z_clamped = (std::abs(b2.z) > 1e-12) ? b2.z : (b2.z >= 0.0 ? 1e-12 : -1e-12);
+        double inv_z = 1.0 / z_clamped;
         out_xs[i] = static_cast<float>(fx * b2.x * inv_z + cx);
         out_ys[i] = static_cast<float>(fy * b2.y * inv_z + cy);
     }

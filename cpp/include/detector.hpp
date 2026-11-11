@@ -145,7 +145,7 @@ inline bool residual_map(const float* xs, const float* ys, const double* te,
     return true;
 }
 
-// Szybka dylatacja logiczna maski binarnej (4-sąsiedztwo)
+// Szybka dylatacja logiczna maski binarnej (8-sąsiedztwo, odpowiednik scipy binary_dilation rank-2)
 inline std::vector<bool> dilate_mask(const std::vector<bool>& m, int W, int H, int r) {
     if (r <= 0) return m;
     std::vector<bool> cur = m;
@@ -154,11 +154,19 @@ inline std::vector<bool> dilate_mask(const std::vector<bool>& m, int W, int H, i
     for (int step = 0; step < r; ++step) {
         for (int y = 0; y < H; ++y) {
             for (int x = 0; x < W; ++x) {
-                bool val = cur[y * W + x]
-                        || (y > 0     && cur[(y - 1) * W + x])
-                        || (y < H - 1 && cur[(y + 1) * W + x])
-                        || (x > 0     && cur[y * W + (x - 1)])
-                        || (x < W - 1 && cur[y * W + (x + 1)]);
+                bool val = cur[y * W + x];
+                for (int dy = -1; dy <= 1 && !val; ++dy) {
+                    for (int dx = -1; dx <= 1 && !val; ++dx) {
+                        int yy = y + dy;
+                        int xx = x + dx;
+                        if (yy >= 0 && yy < H && xx >= 0 && xx < W) {
+                            if (cur[yy * W + xx]) {
+                                val = true;
+                                break;
+                            }
+                        }
+                    }
+                }
                 nxt[y * W + x] = val;
             }
         }
@@ -376,13 +384,33 @@ inline DetectResult detect_imo(const float* xs, const float* ys,
         }
     }
 
-    std::vector<bool> kept(Wg * Hg, false);
-    for (int i = 0; i < Wg * Hg; ++i) {
-        kept[i] = (cell_cluster[i] > 0);
-    }
-
+    // Wypełnianie dziur wewnątrz klastrów (jeśli włączone) - per klaster, aby przypisanie było spójne
     if (params.fill) {
-        kept = fill_holes(kept, Wg, Hg);
+        for (int cid = 1; cid <= kept_count; ++cid) {
+            std::vector<bool> cl_mask(Wg * Hg, false);
+            for (int i = 0; i < Wg * Hg; ++i) {
+                if (cell_cluster[i] == cid) cl_mask[i] = true;
+            }
+            std::vector<bool> filled = fill_holes(cl_mask, Wg, Hg);
+            auto& cl = result.clusters[cid - 1];
+            for (int cy = 0; cy < Hg; ++cy) {
+                for (int cx = 0; cx < Wg; ++cx) {
+                    int idx = cy * Wg + cx;
+                    if (filled[idx] && cell_cluster[idx] == 0) {
+                        cell_cluster[idx] = cid;
+                        cl.cell_count++;
+                        int px0 = cx * CELL_SIZE;
+                        int py0 = cy * CELL_SIZE;
+                        int px1 = std::min(W - 1, (cx + 1) * CELL_SIZE - 1);
+                        int py1 = std::min(H - 1, (cy + 1) * CELL_SIZE - 1);
+                        cl.x_min = std::min(cl.x_min, px0);
+                        cl.y_min = std::min(cl.y_min, py0);
+                        cl.x_max = std::max(cl.x_max, px1);
+                        cl.y_max = std::max(cl.y_max, py1);
+                    }
+                }
+            }
+        }
     }
 
     // Przypisanie etykiety IMO do pojedynczych zdarzeń
@@ -396,10 +424,6 @@ inline DetectResult detect_imo(const float* xs, const float* ys,
                 result.is_imo[i] = true;
                 result.event_cluster[i] = cid;
                 result.clusters[cid - 1].event_count++;
-            } else if (params.fill && kept[idx]) {
-                result.is_imo[i] = true;
-                result.event_cluster[i] = 1;
-                result.clusters[0].event_count++;
             }
         }
     }

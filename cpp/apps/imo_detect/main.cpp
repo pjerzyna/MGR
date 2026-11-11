@@ -143,6 +143,10 @@ int main(int argc, char** argv) {
     NpyArray npy_p((seq_p / "dataset_events_p.npy").string());
 
     size_t total_events = npy_t.size();
+    if (npy_t.kind() != 'f' || (npy_t.itemsize() != 4 && npy_t.itemsize() != 8)) {
+        std::cerr << "Błąd: Nieobsługiwany typ danych dataset_events_t.npy (oczekiwano f4 lub f8)\n";
+        return 4;
+    }
     const float* ev_t_f = (npy_t.itemsize() == 4) ? static_cast<const float*>(npy_t.data()) : nullptr;
     const double* ev_t_d = (npy_t.itemsize() == 8) ? static_cast<const double*>(npy_t.data()) : nullptr;
 
@@ -150,8 +154,47 @@ int main(int argc, char** argv) {
         return ev_t_f ? static_cast<double>(ev_t_f[idx]) : ev_t_d[idx];
     };
 
-    const uint16_t* ev_xy = static_cast<const uint16_t*>(npy_xy.data());
-    const uint8_t* ev_p = static_cast<const uint8_t*>(npy_p.data());
+    if (npy_xy.size() != 2 * total_events) {
+        std::cerr << "Błąd: Niespójny rozmiar dataset_events_xy.npy (oczekiwano " << 2 * total_events
+                  << " elementów, otrzymano " << npy_xy.size() << ")\n";
+        return 5;
+    }
+    const uint16_t* xy_u16 = (npy_xy.kind() == 'u' && npy_xy.itemsize() == 2) ? static_cast<const uint16_t*>(npy_xy.data()) : nullptr;
+    const int32_t*  xy_i32 = (npy_xy.kind() == 'i' && npy_xy.itemsize() == 4) ? static_cast<const int32_t*>(npy_xy.data())  : nullptr;
+    const int16_t*  xy_i16 = (npy_xy.kind() == 'i' && npy_xy.itemsize() == 2) ? static_cast<const int16_t*>(npy_xy.data())  : nullptr;
+    const uint32_t* xy_u32 = (npy_xy.kind() == 'u' && npy_xy.itemsize() == 4) ? static_cast<const uint32_t*>(npy_xy.data()) : nullptr;
+
+    if (!xy_u16 && !xy_i32 && !xy_i16 && !xy_u32) {
+        std::cerr << "Błąd: Nieobsługiwany typ danych dataset_events_xy.npy (kind=" << npy_xy.kind()
+                  << ", itemsize=" << npy_xy.itemsize() << ")\n";
+        return 6;
+    }
+
+    auto get_x = [&](size_t idx) -> float {
+        if (xy_u16) return static_cast<float>(xy_u16[2 * idx + 0]);
+        if (xy_i32) return static_cast<float>(xy_i32[2 * idx + 0]);
+        if (xy_u32) return static_cast<float>(xy_u32[2 * idx + 0]);
+        return static_cast<float>(xy_i16[2 * idx + 0]);
+    };
+    auto get_y = [&](size_t idx) -> float {
+        if (xy_u16) return static_cast<float>(xy_u16[2 * idx + 1]);
+        if (xy_i32) return static_cast<float>(xy_i32[2 * idx + 1]);
+        if (xy_u32) return static_cast<float>(xy_u32[2 * idx + 1]);
+        return static_cast<float>(xy_i16[2 * idx + 1]);
+    };
+
+    if (npy_p.size() != total_events) {
+        std::cerr << "Błąd: Niespójny rozmiar dataset_events_p.npy (oczekiwano " << total_events
+                  << " elementów, otrzymano " << npy_p.size() << ")\n";
+        return 7;
+    }
+    const uint8_t* p_u8  = (npy_p.itemsize() == 1) ? static_cast<const uint8_t*>(npy_p.data()) : nullptr;
+    const int32_t* p_i32 = (npy_p.itemsize() == 4) ? static_cast<const int32_t*>(npy_p.data()) : nullptr;
+    auto get_p = [&](size_t idx) -> uint8_t {
+        if (p_u8) return p_u8[idx] != 0 ? 1 : 0;
+        if (p_i32) return p_i32[idx] != 0 ? 1 : 0;
+        return 1;
+    };
 
     // 3. Wczytanie IMU
     fs::path imu_p = seq_p / "dataset_imu.npy";
@@ -259,8 +302,8 @@ int main(int argc, char** argv) {
         for (size_t i = 0; i < n; ++i) {
             size_t src = i0 + i;
             double t = get_time(src);
-            float x = static_cast<float>(ev_xy[2 * src]);
-            float y = static_cast<float>(ev_xy[2 * src + 1]);
+            float x = get_x(src);
+            float y = get_y(src);
             double bx = 0.0, by = 0.0;
             undistort_point(x, y, intr, bx, by, 8);
 
@@ -268,7 +311,7 @@ int main(int argc, char** argv) {
             win.events[i].px = x;
             win.events[i].py = y;
             win.events[i].bearing = Vec3{bx, by, 1.0};
-            win.events[i].p = ev_p[src];
+            win.events[i].p = get_p(src);
         }
 
         int nst = std::max(2, static_cast<int>(std::round(wlen / 0.001)));
@@ -389,16 +432,22 @@ int main(int argc, char** argv) {
                     out_img = make_side_by_side(left, right);
                 }
 
-                fs::create_directories(a.viz_dir);
+                fs::path ppm_dir = fs::path(a.viz_dir) / "ppm";
+                fs::path png_dir = fs::path(a.viz_dir) / "png";
+                fs::create_directories(ppm_dir);
+                if (a.png) {
+                    fs::create_directories(png_dir);
+                }
+
                 std::ostringstream fn_ppm, fn_png;
-                fn_ppm << a.viz_dir << "/frame_" << std::setfill('0') << std::setw(4) << processed_windows
+                fn_ppm << ppm_dir.string() << "/frame_" << std::setfill('0') << std::setw(4) << processed_windows
                        << "_t" << std::fixed << std::setprecision(4) << tc << "_imo.ppm";
-                fn_png << a.viz_dir << "/frame_" << std::setfill('0') << std::setw(4) << processed_windows
+                fn_png << png_dir.string() << "/frame_" << std::setfill('0') << std::setw(4) << processed_windows
                        << "_t" << std::fixed << std::setprecision(4) << tc << "_imo.png";
 
                 out_img.write_ppm(fn_ppm.str());
                 if (a.png) {
-                    std::string conv_cmd = "convert " + fn_ppm.str() + " " + fn_png.str() + " 2>/dev/null";
+                    std::string conv_cmd = "convert \"" + fn_ppm.str() + "\" \"" + fn_png.str() + "\" 2>/dev/null";
                     int rc = std::system(conv_cmd.c_str());
                     (void)rc;
                 }

@@ -71,8 +71,10 @@ inline std::vector<Event> load_events(const std::string& dir, const LoadOptions&
     });
     xy.visit([&](auto* ptr) {
         for (size_t k = 0; k < m; ++k) {
-            ev[k].x = static_cast<uint16_t>(ptr[2 * (i0 + k)]);      // negative -> huge -> caught as out-of-range
-            ev[k].y = static_cast<uint16_t>(ptr[2 * (i0 + k) + 1]);
+            auto raw_x = ptr[2 * (i0 + k)];
+            auto raw_y = ptr[2 * (i0 + k) + 1];
+            ev[k].x = (raw_x >= 0) ? static_cast<uint16_t>(raw_x) : 0xFFFF;
+            ev[k].y = (raw_y >= 0) ? static_cast<uint16_t>(raw_y) : 0xFFFF;
         }
     });
     p.visit([&](auto* ptr) {

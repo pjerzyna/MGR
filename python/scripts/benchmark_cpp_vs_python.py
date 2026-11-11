@@ -51,6 +51,15 @@ def benchmark_python(seq_dir: Path, n_windows: int = 10, wlen_ms: float = 40.0, 
         centers.append(tc)
         tc += step
         
+    # Warm-up (2 okna przed właściwym pomiarem, aby rozgrzać cache CPU i pule pamięci)
+    warmup_tc = t_start
+    for _ in range(2):
+        w_win = rc.prep_window(warmup_tc, W, t_ev, xy_ev, intr)
+        if w_win["n"] >= 5000:
+            w_xs, w_ys = rc.warp(w_win, cal_ts, cal_w, d)
+            ed.detect_imo(w_xs, w_ys, w_win["te"], warmup_tc, blur=blur, tau=tau, support=1.0, min_cells=8)
+        warmup_tc += step
+
     t_undist_total = 0.0
     t_warp_total = 0.0
     t_det_total = 0.0

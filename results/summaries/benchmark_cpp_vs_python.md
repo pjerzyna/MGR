@@ -27,6 +27,12 @@ Warunki pomiaru: okna 40 ms, krok 40 ms, 10 kolejnych okien w sekwencji, pojedyn
 
 ## 3. Wnioski do pracy dyplomowej
 
-- **Globalny zysk wydajnościowy:** Silnik C++ jest medianowo **8.1× szybszy** od referencyjnej implementacji w Pythonie (zakres 6.1×–10.1×).
-- **Zdolność pracy w czasie rzeczywistym:** Na wszystkich sekwencjach C++ wykonuje obliczenia szybciej niż wynosi długość okna 40 ms (średnio od 4.8 ms do 28.5 ms w zależności od gęstości strumienia). Przepustowość sięga medianowo **3.04 Mev/s**, przewyższając fizyczny limit interfejsu czujnika Prophesee (6.0 Mev/s).
-- **Największy zysk na etapie Undistort i Warp:** Inwersja dystorsji oraz całkowanie kątowe i rzutowanie macierzowe zyskały największe przyspieszenie dzięki eliminacji narzutu alokacji tymczasowych tablic NumPy i zwektoryzowanemu modelowi struktur pamięci cache procesora.
+- **Globalny zysk wydajnościowy:** Silnik C++ jest medianowo **8.1× szybszy** od referencyjnej implementacji w Pythonie (zakres 6.1×–10.1× w ujęciu całościowym potoku).
+- **Zdolność pracy w czasie rzeczywistym:** Na wszystkich sekwencjach C++ wykonuje obliczenia szybciej niż wynosi długość okna 40 ms (średnio od 5.7 ms do 25.5 ms na okno w zależności od gęstości strumienia). Przepustowość sięga od **1.71 Mev/s** (dla sekwencji o małej liczbie zdarzeń) do aż **9.36 Mev/s** (dla sekwencji o skrajnej dynamice, np. `scene13_01`), na gęstych strumieniach wyraźnie przewyższając fizyczny limit przepustowości interfejsu czujnika Prophesee SilkyEvCam (~6.0 Mev/s). Cały potok działa ze współczynnikiem **1.57× do 6.95× czasu rzeczywistego** (na pojedynczym rdzeniu CPU).
+- **Największy zysk na etapie Undistort i Warp:** Inwersja dystorsji (undistort) zyskała przyspieszenie aż **10.0×–43.2×**, a kompensacja rotacji (warp SO(3)) **8.5×–11.3×**. Wynika to z eliminacji narzutu alokacji tymczasowych tablic NumPy, braku interpretera Pythona oraz zwartego, przyjaznego dla pamięci podręcznej (cache-friendly) układu struktur w pamięci.
+- **Metodologia i środowisko pomiaru:**
+  - Kompilator C++: GCC 11+ (`-O3 -std=c++17 -Wall -Wextra`)
+  - Środowisko Python: Python 3.10+, NumPy (C/BLAS backend), SciPy
+  - Warm-up: 2 okna rozgrzewkowe przed aktywacją zegara pomiarowego
+  - Zegar: `std::chrono::high_resolution_clock` (C++) oraz `time.perf_counter()` (Python)
+  - Przetwarzanie sekwencyjne (1 wątek), bez wykorzystania instrukcji wielowątkowych OpenMP/threads (pozostawionych jako opcja rozwojowa).
