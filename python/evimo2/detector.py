@@ -1,6 +1,6 @@
 """Detektor niezależnie poruszających się obiektów (IMO v0): mapa niespójności i klasteryzacja."""
 from collections import deque
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -179,3 +179,28 @@ def render_events(
     if fm is not None:
         img[outline(fm)] = (0.0, 0.0, 0.0)                # obrys szybkich IMO v > 0.3, czerń
     return img
+
+
+def depth_for_events(
+    zd: Any,
+    zdfiles: Set[str],
+    fts: Dict[int, float],
+    fid: int,
+    te: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
+) -> Tuple[Optional[np.ndarray], float]:
+    """Głębia [m] w pikselu każdego zdarzenia z najbliższej w czasie klatki z mapą głębi (mm w pliku);
+    brakujące piksele (0) zastępowane medianą głębi okna. Zwraca (głębia albo None, udział zdarzeń z poprawną głębią)."""
+    cand = [f for f in (fid - 1, fid, fid + 1) if f in fts and f"depth_{f:010d}" in zdfiles]
+    if not cand:
+        return None, 0.0
+    tsc = np.array([fts[f] for f in cand])
+    maps = np.stack([zd[f"depth_{f:010d}"] for f in cand]).astype(np.float32) / 1000.0
+    fi = np.abs(te[:, None] - tsc[None, :]).argmin(1)
+    z = maps[fi, y, x].astype(np.float64)
+    valid = z > 0.05
+    if not valid.any():
+        return None, 0.0
+    return np.where(valid, z, float(np.median(z[valid]))), float(valid.mean())
+

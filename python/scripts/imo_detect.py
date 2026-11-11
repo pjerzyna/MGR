@@ -26,6 +26,9 @@ Ocena na poziomie zdarzeń (GT: maski, pozy -> prędkości z imo_labels.py; tylk
   czułość = TP/P, FPR = FP/N, precyzja = TP/(TP+FP), IoU zdarzeń = TP/(P + FP) (suma po oknach z >= --min-pos
   pozytywnymi; FPR po wszystkich oknach). Warianty: brak kompensacji, oracle d_GT, stałe d (mediana opóźnień
   z INNYCH sekwencji w $EVIMO2_OUT), zero. Wyniki osobno dla okien z wyraźną ego-rotacją (p95 > --hi-px).
+--translation: dodaje warianty ORACLE (GT w przetwarzaniu - tylko górna granica, nie algorytm): "rotacja IMU + translacja"
+(translacja kamery z poz GT i głębia z map GT per zdarzenie, M z IMU), "rotacja GT" i "rotacja + translacja GT"
+(pełne 6-DoF z GT). Porównanie z wariantem tylko-rotacja pokazuje, ile fałszywych alarmów wynika z translacji.
 --grid: zamiast jednego zestawu parametrów liczy siatkę --grid-blur x --grid-tau (domyślnie {3,4,5,6,8} x {0,2; 0,3; 0,4}; warianty: brak kompensacji, stałe) -
 pokazuje kompromis między czułością a odpornością na błędy kompensacji (drobne rozmycie = większa czułość,
 ale większe wymagania co do dokładności kompensacji).
@@ -197,6 +200,22 @@ def save_viz(store, a, odir, names):
     print(f"Zapisano {len(pick)} wizualizacji do {vdir}/")
 
 
+def depth_for_events(zd, zdfiles, fts, fid, te, x, y):
+    """Głębia [m] w pikselu każdego zdarzenia z najbliższej w czasie klatki z mapą głębi (mm w pliku);
+    brakujące piksele (0) zastępowane medianą głębi okna. Zwraca (głębia albo None, udział zdarzeń z poprawną głębią)."""
+    cand = [f for f in (fid - 1, fid, fid + 1) if f in fts and f"depth_{f:010d}" in zdfiles]
+    if not cand:
+        return None, 0.0
+    tsc = np.array([fts[f] for f in cand])
+    maps = np.stack([zd[f"depth_{f:010d}"] for f in cand]).astype(np.float32) / 1000.0
+    fi = np.abs(te[:, None] - tsc[None, :]).argmin(1)
+    z = maps[fi, y, x].astype(np.float64)
+    valid = z > 0.05
+    if not valid.any():
+        return None, 0.0
+    return np.where(valid, z, float(np.median(z[valid]))), float(valid.mean())
+
+
 # ---------- ocena ----------
 def regions_for_frame(z, fid, tsf, kin, a):
     """Maski GT: (obiekty ruchome v > slow_v lub omega > w_thr, rozszerzone) i (szybkie v > fast_v, rozszerzone)."""
@@ -263,6 +282,8 @@ def main():
     ap.add_argument("--grid-tau", type=float, nargs="+", default=[0.2, 0.3, 0.4], help="progi tau w --grid")
     ap.add_argument("--viz", type=int, default=0,
                     help="zapisz tyle wizualizacji okien (zdarzenia: TP/FP/FN/TN, bez kompensacji vs stałe d) do <out>/imo_detect_viz/")
+    ap.add_argument("--translation", action="store_true",
+                    help="dodaj warianty ORACLE z translacją: ruch kamery z poz GT i głębia z map GT (dataset_depth.npz, mm)")
     ap.add_argument("--fill", action="store_true", help="wypełniaj dziury w wykrytych składowych (wnętrza obiektów otoczone obrysem)")
     ap.add_argument("--close", type=int, default=0, help="domknięcie morfologiczne maski przed klasteryzacją [komórki 4x4 px]")
     ap.add_argument("--min-events", type=int, default=5000)
@@ -290,7 +311,7 @@ def main():
     cam = pose_series(info["meta"].get("full_trajectory") or [], "cam")
     if cam is None:
         sys.exit("brak poz kamery w full_trajectory (potrzebne do oceny)")
-    ts_gt, q_gt, _ = cam
+    ts_gt, q_gt, p_gt = cam
     q_gt = unify_hemisphere(q_gt)
     _, tracks = om.load_tracks(info)
     kin = il.kinematics(tracks, a.cls, 0.025)
@@ -304,6 +325,13 @@ def main():
         sys.exit("brak dataset_mask.npz")
     z = np.load(mpath)
     zfiles = set(z.files)
+    zd, zdfiles = None, set()
+    if a.translation:
+        dpath = seq / "dataset_depth.npz"
+        if not dpath.is_file():
+            sys.exit("--translation wymaga dataset_depth.npz")
+        zd = np.load(dpath)
+        zdfiles = set(zd.files)
     frames = sorted((fid, fts[fid]) for fid in (int(k.split("_")[-1]) for k in z.files) if fid in fts and lo <= fts[fid] <= hi_t)
     if not frames:
         sys.exit("brak klatek z maską w dopuszczalnym przedziale czasu")
@@ -320,11 +348,16 @@ def main():
         modes = [m for m in modes if m[0] == "brak kompensacji" or m[0].startswith("stałe")]
     else:
         psets = [(a.blur, a.tau)]
+    if a.translation and not a.grid:
+        modes += [("rotacja IMU + translacja (oracle)", dict(kind="rt_imu", d=d_const)),
+                  ("rotacja GT (oracle)", dict(kind="r_gt")),
+                  ("rotacja+translacja GT (oracle)", dict(kind="rt_gt"))]
     acc = {(name, ps): dict(all=Acc(), hi=Acc()) for name, _ in modes for ps in psets}
     n_win = n_hi = n_det = 0
     speed = gt_speed_series(info)
     wrec = []                                    # cechy ego-ruchu i FPR okna (do korelacji)
     vstore = []                                  # okna do wizualizacji (--viz)
+    dfracs = []                                  # udział zdarzeń z poprawną głębią GT (--translation)
     viz_names = [m[0] for m in modes if m[0] == "brak kompensacji" or m[0].startswith("stałe")]
 
     for fid, tsf in frames:
@@ -347,6 +380,9 @@ def main():
             fi, valid = dd.argmin(1), dd.min(1) <= 0.012
             negm, posm = (~ex[fi, y, x]) & valid, fm[fi, y, x] & valid
         n_pos, n_neg = int(posm.sum()), int(negm.sum())
+        depth_z, dfrac = depth_for_events(zd, zdfiles, fts, fid, win["te"], x, y) if a.translation else (None, None)
+        if a.translation:
+            dfracs.append(dfrac)
         x0, y0 = rc.warp(win, cal_ts, cal_w, None)
         xg, yg = rc.gt_warp(win, ts_gt, q_gt)
         is_hi = np.percentile(np.hypot(x0 - xg, y0 - yg), 95) >= a.hi_px
@@ -357,7 +393,17 @@ def main():
         vrec = dict(seq=seq.name, fid=fid, ts=tsf, x=x.astype(np.int16), y=y.astype(np.int16), pos=posm, neg=negm, pred={}, ex=cen_ex, fm=cen_fm) \
             if (a.viz and len(psets) == 1 and n_pos >= a.min_pos) else None
         for name, d in modes:
-            xs, ys = (x0, y0) if d is None else rc.warp(win, cal_ts, cal_w, d)
+            if isinstance(d, dict):                                   # warianty oracle z GT
+                if d["kind"] != "r_gt" and depth_z is None:
+                    continue
+                if d["kind"] == "r_gt":
+                    xs, ys = xg, yg
+                elif d["kind"] == "rt_imu":
+                    xs, ys = rc.warp_translation(win, rc.rot_matrices(win, cal_ts, cal_w, d["d"]), ts_gt, q_gt, p_gt, depth_z)
+                else:
+                    xs, ys = rc.warp_translation(win, rc.gt_rot_matrices(win, ts_gt, q_gt), ts_gt, q_gt, p_gt, depth_z)
+            else:
+                xs, ys = (x0, y0) if d is None else rc.warp(win, cal_ts, cal_w, d)
             for ps in psets:
                 pa = argparse.Namespace(blur=ps[0], tau=ps[1], support=a.support, min_cells=a.min_cells, fill=a.fill, close=a.close)
                 pred, comps = detect(xs, ys, win["te"], tsf, pa)
@@ -416,6 +462,10 @@ def main():
                 print(f"{ps[0]:4d} {ps[1]:4.1f} | " + " | ".join(cells))
             print()
     print("IoU zdarzeń = TP/(P + FP) w oknach z szybkimi IMO. Wartości nan: brak takich okien w danej grupie.")
+    if a.translation and dfracs:
+        out["depth_valid_fraction_median"] = float(np.median(dfracs))
+        print(f"Głębia GT dostępna dla {100 * np.median(dfracs):.0f}% zdarzeń (mediana okien; min {100 * np.min(dfracs):.0f}%); "
+              "pozostałe dostają medianę głębi okna. Warianty oracle używają GT w przetwarzaniu - to górna granica, nie algorytm.")
     odir = Path(a.out) if a.out else ec.result_dir(seq.name, a.out_root)
     odir.mkdir(parents=True, exist_ok=True)
     (odir / "imo_detect.json").write_text(json.dumps(out, indent=1))

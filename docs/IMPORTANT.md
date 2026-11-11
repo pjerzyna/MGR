@@ -8,6 +8,7 @@
 - Tablica `index` w `dataset_info.npz` (654 elementy): ROZSTRZYGNIĘTE → prekomputowany indeks czasowy zdarzeń o stałym kroku `discretization` = 0,01 s (10 ms). Wpis `index[k]` wskazuje dokładny indeks w `dataset_events_t.npy` dla chwili $t_0 + k \cdot 0,01$ s, co umożliwia natychmiastowy dostęp czasowy $O(1)$ bez przeszukiwania binarnego $O(\log N)$ milionów zdarzeń.
 - Opóźnienie IMU względem GT: ROZSTRZYGNIĘTE → stałe w obrębie sekwencji ($\le 13$ s, dryf $\le 0,15$ ms); wykazuje liniowy dryf zegara w sesji ok. +11 ppm; estymowane per nagranie.
 - Opóźnienie IMU względem zdarzeń z maksymalizacji kontrastu: NIEROZSTRZYGNIĘTE → czułość w oknach 30–100 ms jest rzędu ułamka piksela, co uniemożliwia stabilną estymację online; do ewaluacji algorytmu należy przyjąć skalibrowane opóźnienie z GT.
+- Wpływ paralaksy i model translacji 3D: ROZSTRZYGNIĘTE (Oracle) → Dodanie translacji kamery i głębi GT per zdarzenie redukuje FPR tła 2,5–8× (do 0,008–0,026) i podnosi precyzję do 0,74–0,81 (IoU do 0,28–0,40). Rotacja z IMU jest w pełni równoważna rotacji z GT. Cały nieskompensowany błąd modelu rotacyjnego wynikał z paralaksy.
 
 ## Przegląd 19 sekwencji (survey_sequences.py)
 - Prędkość kątowa $\omega$ kamery z GT: maks. od 0,04 do 2,76 rad/s; czas trwania sekwencji: 1,4–13 s.
@@ -62,3 +63,15 @@
 - Zaimplementowano dedykowany skrypt `gt_motion_viz.py` generujący dwupanelowe zestawienia czystego Ground Truth bez nakładania predykcji detektora:
   * Panel lewy: surowy strumień zdarzeń (polaryzacja ON/OFF) z nałożonymi obrysami obiektów z GT pokolorowanymi według stanu dynamiki (zielony = szybkie IMO $v > 0,3$ m/s, pomarańczowy = obiekty wolne $0,05 < v \le 0,3$ m/s, ciemnoszary = obiekty statyczne) oraz etykietami prędkości liniowej $v$ w m/s.
   * Panel prawy: czyste etykiety zdarzeń z GT (jaskrawy zielony = prawdziwe zdarzenia IMO [czysty TP z GT], pomarańczowy = zdarzenia obiektów wolnych [strefa niejednoznaczna], niebieski = zdarzenia obiektów statycznych, jasnoszary = tło).
+
+## Eksperyment Oracle translacji i głębi (imo_detect.py --translation)
+- Model geometryczny kompensacji 3D: $\mathbf{P}_{ref} = M_i \mathbf{P}_i + R_{wc}(t_{ref})^T (\mathbf{p}_c(t_i) - \mathbf{p}_c(t_{ref}))$, gdzie $\mathbf{P}_i = Z_i (u_i, v_i, 1)^T$ ($Z_i$ z mapy głębi GT w mm przeliczana na metry), a $M_i = R_{wc}(t_{ref})^T R_{wc}(t_i)$ pochodzi z całkowania żyroskopu IMU lub z kwaternionów GT. Następnie punkty rzutowane są perspektywicznie na płaszczyznę obrazu.
+- Wyniki na 4 sekwencjach referencyjnych (`13_01`, `14_05`, `14_04`, `15_03`): dodanie translacji i głębi GT obniża FPR tła 2,5–8× względem samej rotacji (`13_01`: 0,065 $\to$ 0,008; `14_05`: 0,081 $\to$ 0,026; `14_04`: 0,108 $\to$ 0,020; `15_03`: 0,130 $\to$ 0,052), a łącznie względem braku kompensacji aż 6–20×.
+- Precyzja detekcji przy małym udziale IMO ($P/N \approx 0,05$–$0,15$) rośnie z 0,19–0,37 do 0,74–0,81 (IoU zdarzeń rośnie z 0,14–0,25 do 0,28–0,40), co dowodzi, że niska precyzja modelu czystej rotacji wynikała z fałszywych alarmów paralaksy tła.
+- Rotacja z IMU jest w pełni równoważna rotacji z GT: wariant "rotacja IMU + translacja" daje identyczny FPR i precyzję jak "rotacja+translacja GT" (np. w `14_05`: FPR 0,026 vs 0,026; w `14_04`: 0,020 vs 0,020; w `13_01`: 0,008 vs 0,008). Kalibracja żyroskopu całkowicie eliminuje błąd składowej rotacyjnej.
+- Korelacja Spearmana FPR z prędkością kamery w `scene13_01` spada z +0,75 do +0,18, co ostatecznie potwierdza, że źródłem nieskompensowanego sygnału w tle była paralaksa translacyjna.
+- W sekwencjach `14_05`, `14_04`, `15_03` po kompensacji translacji korelacja z prędkością kamery staje się ujemna (−0,44…−0,66): przy szybszym ruchu rośnie liczba zdarzeń generowanych przez tło ($N$), co przy stabilnym poziomie szumu obniża wskaźnik $FP/N$.
+- Resztkowy poziom FPR (1–5%) po pełnej kompensacji stanowi dolną granicę szumową (wynika ze zjawiska apertury, szumu sensora DVS, niepełnego pokrycia map głębi oraz tolerancji krawędziowej masek GT).
+- Pokrycie map głębi w EVIMO2: głębia GT z LiDAR/RGB-D dostępna jest dla 61–84% zdarzeń w oknie (reszta pikseli przyjmuje medianę okna), co oznacza, że zysk z idealnej głębi ciągłej mógłby być jeszcze wyższy.
+- Decyzja projektowa i metodyczna: wariant Oracle (GT w pętli) stanowi w pracy magisterskiej teoretyczną górną granicę możliwości kompensacji ego-ruchu (upper bound) i formalne rozstrzygnięcie wpływu paralaksy. Samodzielny moduł translacji bez GT pozostaje odłożony ze względu na złożoność i dryf całkowania akcelerometru, a biblioteka `evimo2` zachowuje czysty interfejs do opcjonalnej fuzji głębi i pozycji.
+

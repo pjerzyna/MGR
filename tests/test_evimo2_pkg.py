@@ -15,6 +15,9 @@ def test_package_exports():
     assert hasattr(evimo2, "calibrated_gyro")
     assert hasattr(evimo2, "CLASSES")
     assert hasattr(evimo2, "detect_imo")
+    assert hasattr(evimo2, "warp_translation")
+    assert hasattr(evimo2, "rot_matrices")
+    assert hasattr(evimo2, "depth_for_events")
 
 
 def test_geometry_quaternions():
@@ -93,3 +96,27 @@ def test_detector_box_blur():
     # Promień 1 to okno 3x3 (9 komórek)
     assert np.isclose(blurred.sum(), 1.0)
     assert np.isclose(blurred[10, 10], 1.0 / 9.0)
+
+
+def test_warp_translation():
+    """Weryfikacja rzutowania 3D i kompensacji translacji (oracle)."""
+    intr = {"fx": 500.0, "fy": 500.0, "cx": 320.0, "cy": 240.0}
+    win = {
+        "intr": intr,
+        "bearing": np.array([[0.0, 0.0, 1.0]]),
+        "grid": np.array([0.0, 0.02, 0.04]),
+        "kref": 1,
+        "te": np.array([0.0]),
+    }
+    M = np.eye(3)[None, :, :]
+    ts_gt = np.array([0.0, 0.02, 0.04])
+    q_gt = np.array([[1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]])
+    p_gt = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
+    depth_z = np.array([2.0])
+
+    xs, ys = rotcomp.warp_translation(win, M, ts_gt, q_gt, p_gt, depth_z)
+    # Punkt [0, 0, 2] przy przesunięciu kamery o +1 m wzdłuż X ma w chwili ref współrzędne [-1, 0, 2]
+    # Rzut: 500 * (-1 / 2) + 320 = 70.0 px, 500 * (0 / 2) + 240 = 240.0 px
+    assert np.allclose(xs, [70.0])
+    assert np.allclose(ys, [240.0])
+
