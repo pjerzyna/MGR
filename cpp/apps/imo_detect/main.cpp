@@ -32,8 +32,12 @@ struct AppArgs {
 
     // Wizualizacja
     std::string viz_dir = "";
-    std::string viz_mode = "both";   // "both", "sensor", "warped"
-    std::string viz_theme = "dark";  // "dark", "light"
+    std::string viz_mode = "both";       // "both", "sensor", "warped"
+    std::string viz_theme = "dark";      // "dark", "light"
+    std::string viz_color = "unified";   // "unified" (jednolity wyrazisty kolor IMO), "clusters"
+    std::string viz_boxes = "major";     // "major" (tylko duże obiekty), "none" (czysta maska), "all"
+    int viz_min_box_events = 2500;       // Min. zdarzeń w klastrze, by narysować ramkę
+    int viz_max_boxes = 5;               // Maks. liczba rysowanych ramek w trybie major
     int viz_stride = 1;
     bool viz_only_imo = false;
     bool png = true;
@@ -57,8 +61,13 @@ static bool parse_args(int argc, char** argv, AppArgs& a) {
         else if (s == "--viz" && need(1)) a.viz_dir = argv[++i];
         else if (s == "--viz-mode" && need(1)) a.viz_mode = argv[++i];
         else if (s == "--viz-theme" && need(1)) a.viz_theme = argv[++i];
+        else if (s == "--viz-color" && need(1)) a.viz_color = argv[++i];
+        else if (s == "--viz-boxes" && need(1)) a.viz_boxes = argv[++i];
+        else if (s == "--viz-min-box-events" && need(1)) a.viz_min_box_events = std::atoi(argv[++i]);
+        else if (s == "--viz-max-boxes" && need(1)) a.viz_max_boxes = std::atoi(argv[++i]);
         else if (s == "--viz-stride" && need(1)) a.viz_stride = std::atoi(argv[++i]);
         else if (s == "--viz-only-imo") a.viz_only_imo = true;
+        else if (s == "--no-boxes") a.viz_boxes = "none";
         else if (s == "--no-png") a.png = false;
         else return false;
     }
@@ -107,6 +116,10 @@ int main(int argc, char** argv) {
                   << "  --viz DIR       Katalog zapisu wizualizacji (włącza rendering klatek)\n"
                   << "  --viz-mode M    Tryb: both (1280x480, domyślny), sensor (640x480), warped (640x480)\n"
                   << "  --viz-theme T   Motyw: dark (neonowy, domyślny), light (papierowy)\n"
+                  << "  --viz-color C   Kolorowanie IMO: unified (jednolity neonowy czerwony, domyślny), clusters (tęcza)\n"
+                  << "  --viz-boxes B   Ramki Bounding Box: major (tylko duże obiekty, domyślny), none (czysta maska), all\n"
+                  << "  --viz-min-box-events N Min. liczba zdarzeń w obiekcie, by narysować ramkę (domyślnie 2500)\n"
+                  << "  --no-boxes      Wyłącz całkowicie rysowanie ramek (pokazuj czystą mapę zdarzeń)\n"
                   << "  --viz-stride N  Zapisuj co N-te okno czasowe (domyślnie 1)\n"
                   << "  --viz-only-imo  Zapisuj tylko okna, w których wykryto klastry IMO\n"
                   << "  --no-png        Pomiń automatyczną konwersję ImageMagick PPM do PNG\n";
@@ -346,26 +359,33 @@ int main(int argc, char** argv) {
                         << " | IMO: " << imo_count << " EV (" << std::setprecision(1) << (100.0 * imo_count / n) << "%)"
                         << " | KLASTRY: " << res.n_clusters;
 
+                VizOptions opt;
+                opt.theme = a.viz_theme;
+                opt.color_mode = a.viz_color;
+                opt.boxes = a.viz_boxes;
+                opt.min_box_events = a.viz_min_box_events;
+                opt.max_boxes = a.viz_max_boxes;
+
                 ImageRGB out_img;
                 if (a.viz_mode == "sensor") {
                     out_img = render_imo_frame(orig_px.data(), orig_py.data(), pol.data(),
                                                res.is_imo, res.event_cluster.data(), n,
                                                sensor_clusters, "WIDOK SENSORA (RAW EVENTS + IMO)",
-                                               ss_info.str(), a.viz_theme);
+                                               ss_info.str(), opt);
                 } else if (a.viz_mode == "warped") {
                     out_img = render_imo_frame(xs.data(), ys.data(), pol.data(),
                                                res.is_imo, res.event_cluster.data(), n,
                                                res.clusters, "KOMPENSACJA ROTACJI (SO3 WARPED)",
-                                               ss_info.str(), a.viz_theme);
+                                               ss_info.str(), opt);
                 } else { // "both"
                     ImageRGB left = render_imo_frame(orig_px.data(), orig_py.data(), pol.data(),
                                                      res.is_imo, res.event_cluster.data(), n,
                                                      sensor_clusters, "WIDOK SENSORA (RAW EVENTS)",
-                                                     ss_info.str(), a.viz_theme);
+                                                     ss_info.str(), opt);
                     ImageRGB right = render_imo_frame(xs.data(), ys.data(), pol.data(),
                                                       res.is_imo, res.event_cluster.data(), n,
                                                       res.clusters, "KOMPENSACJA ROTACJI SO(3)",
-                                                      ss_info.str(), a.viz_theme);
+                                                      ss_info.str(), opt);
                     out_img = make_side_by_side(left, right);
                 }
 

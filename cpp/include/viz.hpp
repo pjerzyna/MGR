@@ -23,21 +23,21 @@ struct ColorRGB {
     uint8_t r = 0, g = 0, b = 0;
 };
 
-// Paleta 10 jaskrawych, odróżnialnych barw dla klastrów IMO
+// Paleta wyrazistych barw dla głównych klastrów IMO
 inline ColorRGB get_cluster_color(int id) {
     static const ColorRGB palette[] = {
-        {255, 59, 48},    // 1: Czerwony / Koralowy
-        {52, 199, 89},    // 2: Jaskrawy zielony (Limonka)
-        {0, 199, 230},    // 3: Neonowy błękit / Cyan
+        {255, 59, 48},    // 1: Koralowy czerwony
+        {52, 199, 89},    // 2: Jaskrawy zielony
+        {0, 199, 230},    // 3: Neonowy cyan
         {255, 149, 0},    // 4: Bursztynowy pomarańcz
-        {175, 82, 222},   // 5: Fioletowy / Magenta
+        {175, 82, 222},   // 5: Fioletowy / Purpura
         {255, 214, 10},   // 6: Złoty żółty
         {255, 45, 85},    // 7: Różowy
         {48, 209, 88},    // 8: Szmaragdowy
         {100, 210, 255},  // 9: Lodowy błękit
-        {218, 165, 32}    // 10: Ciepły brąz / złoto
+        {218, 165, 32}    // 10: Ciepły brąz
     };
-    if (id <= 0) return {128, 128, 128};
+    if (id <= 0) return {255, 59, 48};
     return palette[(id - 1) % 10];
 }
 
@@ -213,7 +213,15 @@ public:
     }
 };
 
-// Renderowanie nakładki zdarzeń, klastrów IMO i ramek Bounding Box
+struct VizOptions {
+    std::string theme = "dark";        // "dark", "light"
+    std::string color_mode = "unified"; // "unified" (jednolity wyrazisty kolor IMO), "clusters" (różne barwy per klaster)
+    std::string boxes = "major";       // "none" (czysta maska), "major" (tylko duże obiekty >= min_box_events), "all" (wszystkie)
+    int min_box_events = 2500;         // Min. liczba zdarzeń w klastrze, by narysować ramkę w trybie "major"
+    int max_boxes = 5;                 // Maks. liczba rysowanych ramek w trybie "major"
+};
+
+// Renderowanie czytelnej nakładki zdarzeń IMO
 inline ImageRGB render_imo_frame(
     const float* xs, const float* ys,
     const uint8_t* pol,
@@ -223,15 +231,18 @@ inline ImageRGB render_imo_frame(
     const std::vector<ClusterInfo>& clusters,
     const std::string& title,
     const std::string& info_line,
-    const std::string& theme = "dark",
+    const VizOptions& opt,
     int W = 640, int H = 480
 ) {
-    bool dark = (theme == "dark");
-    ColorRGB bg_col    = dark ? ColorRGB{16, 18, 22}   : ColorRGB{246, 247, 249};
-    ColorRGB bar_bg    = dark ? ColorRGB{26, 29, 36}   : ColorRGB{228, 232, 238};
-    ColorRGB bar_line  = dark ? ColorRGB{45, 50, 60}   : ColorRGB{200, 205, 215};
+    bool dark = (opt.theme == "dark");
+    ColorRGB bg_col    = dark ? ColorRGB{14, 16, 20}   : ColorRGB{246, 247, 249};
+    ColorRGB bar_bg    = dark ? ColorRGB{24, 27, 34}   : ColorRGB{228, 232, 238};
+    ColorRGB bar_line  = dark ? ColorRGB{42, 47, 56}   : ColorRGB{200, 205, 215};
     ColorRGB text_col  = dark ? ColorRGB{240, 245, 255} : ColorRGB{25, 30, 40};
     ColorRGB sub_col   = dark ? ColorRGB{150, 160, 175} : ColorRGB{90, 100, 115};
+
+    // Główny wyrazisty kolor dla wykrytego ruchu (IMO)
+    ColorRGB imo_unified = dark ? ColorRGB{255, 60, 60} : ColorRGB{220, 25, 30};
 
     ImageRGB img(W, H, bg_col);
 
@@ -255,13 +266,13 @@ inline ImageRGB render_imo_frame(
 
         ColorRGB c;
         if (dark) {
-            if (pol && pol[i] == 1)      c = {75, 110, 155}; // ON: stalowy błękit
-            else if (pol && pol[i] == 0) c = {130, 95, 85};  // OFF: ciepły łupek
-            else                         c = {85, 95, 110};  // neutralny
+            if (pol && pol[i] == 1)      c = {60, 85, 120};  // ON: subtelny błękit
+            else if (pol && pol[i] == 0) c = {100, 75, 70};  // OFF: subtelny łupek
+            else                         c = {75, 80, 90};   // neutralny szary
         } else {
-            if (pol && pol[i] == 1)      c = {130, 155, 190};
-            else if (pol && pol[i] == 0) c = {180, 140, 130};
-            else                         c = {165, 170, 180};
+            if (pol && pol[i] == 1)      c = {140, 160, 190};
+            else if (pol && pol[i] == 0) c = {190, 155, 145};
+            else                         c = {175, 180, 185};
         }
         img.set_pixel(px, py, c);
     }
@@ -274,38 +285,54 @@ inline ImageRGB render_imo_frame(
         int py = static_cast<int>(std::round(ys[i]));
         if (px < 0 || px >= W || py < 24 || py >= H) continue;
 
-        int cid = (event_cluster && event_cluster[i] > 0) ? event_cluster[i] : 1;
-        ColorRGB c = get_cluster_color(cid);
+        ColorRGB c = imo_unified;
+        if (opt.color_mode == "clusters") {
+            int cid = (event_cluster && event_cluster[i] > 0) ? event_cluster[i] : 1;
+            c = get_cluster_color(cid);
+        }
         img.set_pixel(px, py, c);
     }
 
-    // 4. Rysowanie Bounding Boxów i etykiet dla wykrytych klastrów
-    for (const auto& cl : clusters) {
-        if (cl.event_count < 10) continue;
+    // 4. Rysowanie Bounding Boxów (opcjonalne i inteligentnie filtrowane)
+    if (opt.boxes != "none" && !clusters.empty()) {
+        std::vector<ClusterInfo> sorted_cl = clusters;
+        std::sort(sorted_cl.begin(), sorted_cl.end(), [](const ClusterInfo& a, const ClusterInfo& b) {
+            return a.event_count > b.event_count;
+        });
 
-        ColorRGB cl_col = get_cluster_color(cl.id);
-        int bx0 = std::clamp(cl.x_min - 3, 0, W - 1);
-        int bx1 = std::clamp(cl.x_max + 3, 0, W - 1);
-        int by0 = std::clamp(cl.y_min - 3, 24, H - 1);
-        int by1 = std::clamp(cl.y_max + 3, 24, H - 1);
+        int drawn = 0;
+        for (const auto& cl : sorted_cl) {
+            if (opt.boxes == "major") {
+                if (cl.event_count < opt.min_box_events) break;
+                if (drawn >= opt.max_boxes) break;
+            }
 
-        // Ramka o grubości 2 px
-        img.draw_rect(bx0, by0, bx1, by1, cl_col, 2);
+            ColorRGB cl_col = (opt.color_mode == "clusters") ? get_cluster_color(cl.id) : ColorRGB{255, 220, 40}; // złotożółty
+            int bx0 = std::clamp(cl.x_min - 2, 0, W - 1);
+            int bx1 = std::clamp(cl.x_max + 2, 0, W - 1);
+            int by0 = std::clamp(cl.y_min - 2, 24, H - 1);
+            int by1 = std::clamp(cl.y_max + 2, 24, H - 1);
 
-        // Znacznik tekstowy: [#ID: N_ev]
-        std::ostringstream tag_oss;
-        tag_oss << "#" << cl.id << " (" << cl.event_count << " EV)";
-        std::string tag = tag_oss.str();
+            // Subtelna ramka 1 px (lub 2 px)
+            img.draw_rect(bx0, by0, bx1, by1, cl_col, 2);
 
-        int tag_w = static_cast<int>(tag.size()) * 6 + 6;
-        int tag_h = 11;
-        int tag_x = bx0;
-        int tag_y = (by0 >= 24 + tag_h) ? (by0 - tag_h) : (by0 + 3);
-        if (tag_x + tag_w >= W) tag_x = W - 1 - tag_w;
+            // Zwięzły znacznik tekstowy
+            std::ostringstream tag_oss;
+            tag_oss << "#" << cl.id << " (" << cl.event_count << " EV)";
+            std::string tag = tag_oss.str();
 
-        img.fill_rect(tag_x, tag_y, tag_x + tag_w - 1, tag_y + tag_h - 1, dark ? ColorRGB{20, 22, 28} : ColorRGB{250, 250, 250});
-        img.draw_rect(tag_x, tag_y, tag_x + tag_w - 1, tag_y + tag_h - 1, cl_col, 1);
-        img.draw_text(tag_x + 3, tag_y + 2, tag, cl_col, 1);
+            int tag_w = static_cast<int>(tag.size()) * 6 + 4;
+            int tag_h = 10;
+            int tag_x = bx0;
+            int tag_y = (by0 >= 24 + tag_h) ? (by0 - tag_h) : (by0 + 2);
+            if (tag_x + tag_w >= W) tag_x = W - 1 - tag_w;
+
+            img.fill_rect(tag_x, tag_y, tag_x + tag_w - 1, tag_y + tag_h - 1, dark ? ColorRGB{20, 22, 26} : ColorRGB{250, 250, 250});
+            img.draw_rect(tag_x, tag_y, tag_x + tag_w - 1, tag_y + tag_h - 1, cl_col, 1);
+            img.draw_text(tag_x + 2, tag_y + 1, tag, cl_col, 1);
+
+            ++drawn;
+        }
     }
 
     return img;
