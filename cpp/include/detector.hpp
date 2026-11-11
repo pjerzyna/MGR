@@ -22,9 +22,21 @@ struct DetectParams {
     int close = 0;            // Domknięcie morfologiczne siatki komórek (promień komórek)
 };
 
+struct ClusterInfo {
+    int id = 0;
+    int x_min = 100000;
+    int y_min = 100000;
+    int x_max = -1;
+    int y_max = -1;
+    int event_count = 0;
+    int cell_count = 0;
+};
+
 struct DetectResult {
-    std::vector<bool> is_imo; // Etykieta IMO per zdarzenie (N)
-    int n_clusters = 0;       // Liczba wykrytych klastrów
+    std::vector<bool> is_imo;           // Etykieta IMO per zdarzenie (N)
+    std::vector<int> event_cluster;     // ID klastra (0 = tło, 1..K = klastry) per zdarzenie (N)
+    int n_clusters = 0;                 // Liczba zachowanych klastrów
+    std::vector<ClusterInfo> clusters;  // Metadane klastrów wraz z Bounding Boxami
 };
 
 // Szybki filtr pudełkowy 2D przez tablicę sum skumulowanych (SAT / Integral Image)
@@ -275,6 +287,7 @@ inline DetectResult detect_imo(const float* xs, const float* ys,
                                int W = DEFAULT_W, int H = DEFAULT_H) {
     DetectResult result;
     result.is_imo.assign(n, false);
+    result.event_cluster.assign(n, 0);
     result.n_clusters = 0;
 
     std::vector<float> D, S;
@@ -321,11 +334,13 @@ inline DetectResult detect_imo(const float* xs, const float* ys,
     label_cc(g, Wg, Hg, lab, areas);
 
     std::vector<bool> keep_label(areas.size(), false);
+    std::vector<int> remap_id(areas.size(), 0);
     int kept_count = 0;
     for (size_t k = 1; k < areas.size(); ++k) {
         if (areas[k] >= params.min_cells) {
             keep_label[k] = true;
             ++kept_count;
+            remap_id[k] = kept_count;
         }
     }
 
@@ -333,11 +348,37 @@ inline DetectResult detect_imo(const float* xs, const float* ys,
         return result;
     }
 
+    result.n_clusters = kept_count;
+    result.clusters.resize(kept_count);
+    for (int k = 0; k < kept_count; ++k) {
+        result.clusters[k].id = k + 1;
+    }
+
+    std::vector<int> cell_cluster(Wg * Hg, 0);
+    for (int cy = 0; cy < Hg; ++cy) {
+        for (int cx = 0; cx < Wg; ++cx) {
+            int idx = cy * Wg + cx;
+            int l = lab[idx];
+            if (l > 0 && keep_label[l]) {
+                int cid = remap_id[l];
+                cell_cluster[idx] = cid;
+                auto& cl = result.clusters[cid - 1];
+                cl.cell_count++;
+                int px0 = cx * CELL_SIZE;
+                int py0 = cy * CELL_SIZE;
+                int px1 = std::min(W - 1, (cx + 1) * CELL_SIZE - 1);
+                int py1 = std::min(H - 1, (cy + 1) * CELL_SIZE - 1);
+                cl.x_min = std::min(cl.x_min, px0);
+                cl.y_min = std::min(cl.y_min, py0);
+                cl.x_max = std::max(cl.x_max, px1);
+                cl.y_max = std::max(cl.y_max, py1);
+            }
+        }
+    }
+
     std::vector<bool> kept(Wg * Hg, false);
     for (int i = 0; i < Wg * Hg; ++i) {
-        if (lab[i] > 0 && keep_label[lab[i]]) {
-            kept[i] = true;
-        }
+        kept[i] = (cell_cluster[i] > 0);
     }
 
     if (params.fill) {
@@ -349,11 +390,20 @@ inline DetectResult detect_imo(const float* xs, const float* ys,
         int cx = static_cast<int>(std::floor(xs[i] / static_cast<float>(CELL_SIZE)));
         int cy = static_cast<int>(std::floor(ys[i] / static_cast<float>(CELL_SIZE)));
         if (cx >= 0 && cx < Wg && cy >= 0 && cy < Hg) {
-            result.is_imo[i] = kept[cy * Wg + cx];
+            int idx = cy * Wg + cx;
+            int cid = cell_cluster[idx];
+            if (cid > 0) {
+                result.is_imo[i] = true;
+                result.event_cluster[i] = cid;
+                result.clusters[cid - 1].event_count++;
+            } else if (params.fill && kept[idx]) {
+                result.is_imo[i] = true;
+                result.event_cluster[i] = 1;
+                result.clusters[0].event_count++;
+            }
         }
     }
 
-    result.n_clusters = kept_count;
     return result;
 }
 

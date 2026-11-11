@@ -13,6 +13,7 @@
 #include "calibration.hpp"
 #include "rotcomp.hpp"
 #include "detector.hpp"
+#include "viz.hpp"
 #include "npy.hpp"
 
 using namespace evimo2;
@@ -28,6 +29,14 @@ struct AppArgs {
     int min_cells = 8;
     double lag_ms = -15.7;
     std::string out_dir = "";
+
+    // Wizualizacja
+    std::string viz_dir = "";
+    std::string viz_mode = "both";   // "both", "sensor", "warped"
+    std::string viz_theme = "dark";  // "dark", "light"
+    int viz_stride = 1;
+    bool viz_only_imo = false;
+    bool png = true;
 };
 
 static bool parse_args(int argc, char** argv, AppArgs& a) {
@@ -45,6 +54,12 @@ static bool parse_args(int argc, char** argv, AppArgs& a) {
         else if (s == "--min-cells" && need(1)) a.min_cells = std::atoi(argv[++i]);
         else if (s == "--lag-ms" && need(1)) a.lag_ms = std::atof(argv[++i]);
         else if (s == "--out" && need(1)) a.out_dir = argv[++i];
+        else if (s == "--viz" && need(1)) a.viz_dir = argv[++i];
+        else if (s == "--viz-mode" && need(1)) a.viz_mode = argv[++i];
+        else if (s == "--viz-theme" && need(1)) a.viz_theme = argv[++i];
+        else if (s == "--viz-stride" && need(1)) a.viz_stride = std::atoi(argv[++i]);
+        else if (s == "--viz-only-imo") a.viz_only_imo = true;
+        else if (s == "--no-png") a.png = false;
         else return false;
     }
     return true;
@@ -88,7 +103,13 @@ int main(int argc, char** argv) {
                   << "  --support F     Mnożnik progu wsparcia S (domyślnie 1.0)\n"
                   << "  --min-cells N   Min. liczba komórek 4x4 w klastrze (domyślnie 8)\n"
                   << "  --lag-ms F      Opóźnienie IMU w ms (domyślnie -15.7)\n"
-                  << "  --out DIR       Katalog wyjściowy wyników\n";
+                  << "  --out DIR       Katalog wyjściowy wyników numerycznych\n"
+                  << "  --viz DIR       Katalog zapisu wizualizacji (włącza rendering klatek)\n"
+                  << "  --viz-mode M    Tryb: both (1280x480, domyślny), sensor (640x480), warped (640x480)\n"
+                  << "  --viz-theme T   Motyw: dark (neonowy, domyślny), light (papierowy)\n"
+                  << "  --viz-stride N  Zapisuj co N-te okno czasowe (domyślnie 1)\n"
+                  << "  --viz-only-imo  Zapisuj tylko okna, w których wykryto klastry IMO\n"
+                  << "  --no-png        Pomiń automatyczną konwersję ImageMagick PPM do PNG\n";
         return 1;
     }
 
@@ -284,6 +305,85 @@ int main(int argc, char** argv) {
                   << std::setw(9)  << std::setprecision(2) << d_warp << " ms"
                   << std::setw(9)  << std::setprecision(2) << d_det << " ms"
                   << std::setw(11) << std::setprecision(2) << d_sum << " ms" << "\n";
+
+        // 4. Wizualizacja klastrów IMO (jeśli podano --viz)
+        if (!a.viz_dir.empty()) {
+            bool should_save = true;
+            if (a.viz_only_imo && res.n_clusters == 0) should_save = false;
+            if ((processed_windows - 1) % a.viz_stride != 0) should_save = false;
+
+            if (should_save) {
+                // Wyznaczenie bounding boxów klastrów we współrzędnych sensora
+                std::vector<ClusterInfo> sensor_clusters = res.clusters;
+                for (auto& cl : sensor_clusters) {
+                    cl.x_min = DEFAULT_W; cl.y_min = DEFAULT_H;
+                    cl.x_max = -1; cl.y_max = -1;
+                }
+                for (size_t i = 0; i < n; ++i) {
+                    int cid = res.event_cluster[i];
+                    if (cid > 0 && cid <= static_cast<int>(sensor_clusters.size())) {
+                        int px = static_cast<int>(std::round(win.events[i].px));
+                        int py = static_cast<int>(std::round(win.events[i].py));
+                        auto& cl = sensor_clusters[cid - 1];
+                        cl.x_min = std::min(cl.x_min, px);
+                        cl.y_min = std::min(cl.y_min, py);
+                        cl.x_max = std::max(cl.x_max, px);
+                        cl.y_max = std::max(cl.y_max, py);
+                    }
+                }
+
+                std::vector<float> orig_px(n), orig_py(n);
+                std::vector<uint8_t> pol(n);
+                for (size_t i = 0; i < n; ++i) {
+                    orig_px[i] = win.events[i].px;
+                    orig_py[i] = win.events[i].py;
+                    pol[i] = win.events[i].p;
+                }
+
+                std::ostringstream ss_info;
+                ss_info << "WIN #" << processed_windows
+                        << " | T: " << std::fixed << std::setprecision(3) << tc << "S"
+                        << " | IMO: " << imo_count << " EV (" << std::setprecision(1) << (100.0 * imo_count / n) << "%)"
+                        << " | KLASTRY: " << res.n_clusters;
+
+                ImageRGB out_img;
+                if (a.viz_mode == "sensor") {
+                    out_img = render_imo_frame(orig_px.data(), orig_py.data(), pol.data(),
+                                               res.is_imo, res.event_cluster.data(), n,
+                                               sensor_clusters, "WIDOK SENSORA (RAW EVENTS + IMO)",
+                                               ss_info.str(), a.viz_theme);
+                } else if (a.viz_mode == "warped") {
+                    out_img = render_imo_frame(xs.data(), ys.data(), pol.data(),
+                                               res.is_imo, res.event_cluster.data(), n,
+                                               res.clusters, "KOMPENSACJA ROTACJI (SO3 WARPED)",
+                                               ss_info.str(), a.viz_theme);
+                } else { // "both"
+                    ImageRGB left = render_imo_frame(orig_px.data(), orig_py.data(), pol.data(),
+                                                     res.is_imo, res.event_cluster.data(), n,
+                                                     sensor_clusters, "WIDOK SENSORA (RAW EVENTS)",
+                                                     ss_info.str(), a.viz_theme);
+                    ImageRGB right = render_imo_frame(xs.data(), ys.data(), pol.data(),
+                                                      res.is_imo, res.event_cluster.data(), n,
+                                                      res.clusters, "KOMPENSACJA ROTACJI SO(3)",
+                                                      ss_info.str(), a.viz_theme);
+                    out_img = make_side_by_side(left, right);
+                }
+
+                fs::create_directories(a.viz_dir);
+                std::ostringstream fn_ppm, fn_png;
+                fn_ppm << a.viz_dir << "/frame_" << std::setfill('0') << std::setw(4) << processed_windows
+                       << "_t" << std::fixed << std::setprecision(4) << tc << "_imo.ppm";
+                fn_png << a.viz_dir << "/frame_" << std::setfill('0') << std::setw(4) << processed_windows
+                       << "_t" << std::fixed << std::setprecision(4) << tc << "_imo.png";
+
+                out_img.write_ppm(fn_ppm.str());
+                if (a.png) {
+                    std::string conv_cmd = "convert " + fn_ppm.str() + " " + fn_png.str() + " 2>/dev/null";
+                    int rc = std::system(conv_cmd.c_str());
+                    (void)rc;
+                }
+            }
+        }
     }
 
     std::cout << "================================================================================\n";
@@ -301,6 +401,10 @@ int main(int argc, char** argv) {
     double rt_factor = (processed_windows * a.step_ms) / total_time_ms;
     std::cout << "  Współczynnik czasu rzecz.: " << std::setprecision(2) << rt_factor
               << "x czasu rzeczywistego (przetwarza " << rt_factor << "s danych w 1s)\n";
+    if (!a.viz_dir.empty()) {
+        std::cout << "  Wizualizacje zapisano do : " << a.viz_dir << "/ (tryb: " << a.viz_mode
+                  << ", motyw: " << a.viz_theme << (a.png ? ", format: PPM + PNG" : ", format: PPM") << ")\n";
+    }
     std::cout << "================================================================================\n";
 
     return 0;
