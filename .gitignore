@@ -21,6 +21,8 @@ python/scripts/quick.py
 
 # C++ binaries & build
 /cpp/build/
+/cpp/bin/
+/cpp/tests/test_numerics
 /cpp/apps/viewer/evimo2_viewer
 /cpp/viewer/evimo2_viewer
 /evimo2_viewer

@@ -75,3 +75,9 @@
 - Pokrycie map głębi w EVIMO2: głębia GT z LiDAR/RGB-D dostępna jest dla 61–84% zdarzeń w oknie (reszta pikseli przyjmuje medianę okna), co oznacza, że zysk z idealnej głębi ciągłej mógłby być jeszcze wyższy.
 - Decyzja projektowa i metodyczna: wariant Oracle (GT w pętli) stanowi w pracy magisterskiej teoretyczną górną granicę możliwości kompensacji ego-ruchu (upper bound) i formalne rozstrzygnięcie wpływu paralaksy. Samodzielny moduł translacji bez GT pozostaje odłożony ze względu na złożoność i dryf całkowania akcelerometru, a biblioteka `evimo2` zachowuje czysty interfejs do opcjonalnej fuzji głębi i pozycji.
 
+## Implementacja C++ i walidacja numeryczna (cpp/) [ZROBIONE]
+- Pełny port potoku detekcji runtime z Pythona do C++17 (`camera.hpp`, `calibration.hpp`, `rotcomp.hpp`, `detector.hpp`) bez zewnętrznych zależności (brak Eigen i OpenCV, zero-copy mmap przez `npy.hpp`).
+- Weryfikacja numeryczna (`test_numerics.cpp`): 100% zgodności z referencją pythonową na 233 144 zdarzeniach (maks. błąd promieni $1,1 \cdot 10^{-16}$, macierzy $1,0 \cdot 10^{-15}$, współrzędnych $3,0 \cdot 10^{-5}$ px, 0 / 233 144 błędów klasyfikacji IMO).
+- Wydajność i throughput (`bin/imo_detect`): przetworzenie 3,08 miliona zdarzeń w 465 ms (średnio 13,7 ms na okno 40 ms; przepustowość 6,61 Mev/s). Przekracza szczytową przepustowość czujnika Prophesee (~6 Mev/s) i osiąga współczynnik czasu rzeczywistego 2,92× na pojedynczym rdzeniu CPU.
+
+
