@@ -62,3 +62,11 @@
 - Zaimplementowano dedykowany skrypt `gt_motion_viz.py` generujący dwupanelowe zestawienia czystego Ground Truth bez nakładania predykcji detektora:
   * Panel lewy: surowy strumień zdarzeń (polaryzacja ON/OFF) z nałożonymi obrysami obiektów z GT pokolorowanymi według stanu dynamiki (zielony = szybkie IMO $v > 0,3$ m/s, pomarańczowy = obiekty wolne $0,05 < v \le 0,3$ m/s, ciemnoszary = obiekty statyczne) oraz etykietami prędkości liniowej $v$ w m/s.
   * Panel prawy: czyste etykiety zdarzeń z GT (jaskrawy zielony = prawdziwe zdarzenia IMO [czysty TP z GT], pomarańczowy = zdarzenia obiektów wolnych [strefa niejednoznaczna], niebieski = zdarzenia obiektów statycznych, jasnoszary = tło).
+
+## Nowe wnioski po dodadniu głębi
+- Oracle translacji (imo_detect.py --translation; ruch kamery z poz GT, głębia z map GT w mm, rotacja z IMU lub GT): P_ref = M P_i + R_ref^T (p_i - p_ref), P_i = Z (u, v, 1). Test syntetyczny (płaszczyzna, kamera do 0,8 m/s): FPR 0,49 (rotacja IMU) → 0,008 (rotacja IMU + translacja), IoU 0,04 → 0,36; rotacja IMU = rotacja GT; korelacja FPR z prędkością kamery +0,66 → +0,18. To weryfikacja implementacji, nie danych rzeczywistych. Wyniki na 13_01, 14_05, 14_04, 15_03: do uzupełnienia.
+- Warianty oracle (GT w przetwarzaniu) to górna granica, nie algorytm; wersja bez GT (stała/modelowana głębia) wymaga osobnego eksperymentu.
+
+## Nowe Wnioski
+- Oracle translacji (imo_detect.py --translation; GT: ruch kamery z poz i głębia z map w mm; rotacja IMU): FPR rotacja → rotacja+translacja: 13_01 0,065 → 0,008, 14_05 0,081 → 0,026, 14_04 0,108 → 0,020, 15_03 0,130 → 0,052 (2,5–8×); precyzja 0,19 → 0,79, 0,37 → 0,81, 0,22 → 0,74 (15_03 bez zmian); IoU 0,14 → 0,28, 0,25 → 0,40, 0,16 → 0,32. Rotacja z IMU = rotacja z GT. Korelacja FPR z prędkością kamery w 13_01 +0,75 → +0,18 (paralaksa). Głębia GT dostępna dla 61–84% zdarzeń (reszta = mediana). Górna granica, nie algorytm; po kompensacji zostaje FPR 1–5% o nieznanym pochodzeniu.
+- Decyzja robocza: translacja z głębią = wynik/model w pracy, moduł bez GT odłożony; w refaktoryzacji zachować interfejs (opcjonalny dostawca głębi i translacji).
