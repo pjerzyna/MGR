@@ -1,0 +1,20 @@
+{
+  "sequence": "scene14_dyn_test_05_000000",
+  "window_ms": 40,
+  "step_ms": 40,
+  "blur": 3,
+  "tau": 0.5,
+  "support": 1,
+  "min_cells": 8,
+  "lag_ms": -15.6,
+  "warmup_windows": 2,
+  "processed_windows": 34,
+  "processed_events": 3081126,
+  "total_time_ms": 742.235,
+  "avg_window_ms": 21.8304,
+  "avg_undist_ms": 9.98789,
+  "avg_warp_ms": 5.79492,
+  "avg_detect_ms": 6.04763,
+  "throughput_mev": 4.15115,
+  "rt_factor": 1.8323
+}
