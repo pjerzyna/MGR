@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ewaluacja detektora v2 z filtrem epipolarnym (FOE) na sekwencji translacyjnej scene13_01."""
+"""Ewaluacja detektora v2 z filtrem epipolarnym (FOE) na sekwencji translacyjnej."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path("python").resolve()))
@@ -8,6 +8,7 @@ import json
 import csv
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
 
 import evimo2 as ev
 from evimo2.geometry import qrot, qconj
@@ -16,17 +17,92 @@ SEQ_PATH_DEFAULT = Path("data/npz_left_camera_imo/left_camera/imo/train/scene13_
 OUT_DIR_DEFAULT = Path("results/v2_epipolar_foe")
 
 
+def render_comparison_panel(win, xs, ys, posm, negm, pred_v1, pred_v2, clusters, fmask, v_cam, fid, speed, save_path):
+    H, W = 480, 640
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6), facecolor="#111827")
+    for ax in axes:
+        ax.set_facecolor("#1f2937")
+
+    iwe_img = np.zeros((H, W), np.float32)
+    np.add.at(iwe_img, (np.clip(ys.astype(int), 0, H - 1), np.clip(xs.astype(int), 0, W - 1)), 1)
+    iwe_vis = np.clip(iwe_img / 5.0, 0, 1)
+
+    # Panel 1: GT
+    im1 = np.stack([iwe_vis * 0.4, iwe_vis * 0.4, iwe_vis * 0.4], axis=-1)
+    im1[fmask] = [0.1, 0.9, 0.2]
+    axes[0].imshow(im1)
+    axes[0].set_title(f"Klatka {fid} | Maska Ground Truth (zielony: IMO)\nPrędkość kamery |v| = {speed:.3f} m/s", color="white", fontsize=11)
+
+    # Panel 2: v1
+    im2 = np.stack([iwe_vis * 0.3, iwe_vis * 0.3, iwe_vis * 0.3], axis=-1)
+    fp_v1 = np.zeros((H, W), bool)
+    tp_v1 = np.zeros((H, W), bool)
+    for i in range(len(xs)):
+        if pred_v1[i]:
+            px, py = int(xs[i]), int(ys[i])
+            if 0 <= px < W and 0 <= py < H:
+                if posm[i]: tp_v1[py, px] = True
+                elif negm[i]: fp_v1[py, px] = True
+    im2[fp_v1] = [0.95, 0.2, 0.2]
+    im2[tp_v1] = [0.2, 0.9, 0.2]
+    axes[1].imshow(im2)
+    tp1_s, fp1_s = tp_v1.sum(), fp_v1.sum()
+    p1 = tp1_s / (tp1_s + fp1_s + 1e-6) * 100
+    axes[1].set_title(f"Detektor v1: Tylko rotcomp SO(3)\nPrecyzja klatki: {p1:.1f}% (czerwony: błędy paralaksy)", color="white", fontsize=11)
+
+    # Panel 3: v2
+    im3 = np.stack([iwe_vis * 0.3, iwe_vis * 0.3, iwe_vis * 0.3], axis=-1)
+    fp_v2 = np.zeros((H, W), bool)
+    tp_v2 = np.zeros((H, W), bool)
+    for i in range(len(xs)):
+        if pred_v2[i]:
+            px, py = int(xs[i]), int(ys[i])
+            if 0 <= px < W and 0 <= py < H:
+                if posm[i]: tp_v2[py, px] = True
+                elif negm[i]: fp_v2[py, px] = True
+    im3[fp_v2] = [0.95, 0.2, 0.2]
+    im3[tp_v2] = [0.2, 0.9, 0.2]
+    axes[2].imshow(im3)
+
+    for c in clusters:
+        x0, x1, y0, y1 = c["bbox"]
+        xm, ym = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
+        dx, dy = c.get("shift", (0, 0))
+        if c.get("is_imo", False):
+            axes[2].arrow(xm, ym, dx * 4, dy * 4, head_width=8, color="#38bdf8", lw=2)
+        else:
+            axes[2].arrow(xm, ym, dx * 4, dy * 4, head_width=6, color="#a855f7", lw=1.5, alpha=0.7)
+
+    tp2_s, fp2_s = tp_v2.sum(), fp_v2.sum()
+    p2 = tp2_s / (tp2_s + fp2_s + 1e-6) * 100
+    axes[2].set_title(f"Detektor v2: Rotcomp + Filtr Epipolarny FOE\nPrecyzja klatki: {p2:.1f}% (fiolet: tło, cyjan: IMO)", color="white", fontsize=11)
+
+    for ax in axes:
+        ax.tick_params(colors="white")
+        for spine in ax.spines.values():
+            spine.set_color("#374151")
+
+    plt.tight_layout()
+    fig.savefig(save_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Ewaluacja detektora v2 FOE na sekwencji translacyjnej.")
     parser.add_argument("--seq", type=Path, default=SEQ_PATH_DEFAULT, help="Ścieżka do sekwencji EVIMO2")
     parser.add_argument("--out", type=Path, default=OUT_DIR_DEFAULT, help="Katalog wyjściowy na wyniki CSV/raporty")
     parser.add_argument("--angle-thresh", type=float, default=35.0, help="Próg kątowy w stopniach dla linii epipolarnych")
     parser.add_argument("--min-speed", type=float, default=0.05, help="Minimalna prędkość translacji kamery [m/s]")
+    parser.add_argument("--max-frames", type=int, default=0, help="Maksymalna liczba klatek do przeliczenia (0 = wszystkie)")
+    parser.add_argument("--viz", type=int, default=0, help="Liczba wygenerowanych wizualizacji klatek PNG (0 = brak)")
     args = parser.parse_args()
 
     seq_path = args.seq
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
+    viz_dir = out_dir / "viz"
+    if args.viz > 0:
+        viz_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Ładowanie danych z {seq_path}...")
     with open(seq_path / "dataset_intrinsics.json") as f:
@@ -53,9 +129,13 @@ def main():
     tot_tp2, tot_fp2, tot_fn2 = 0, 0, 0
     tot_events = 0
     frames_evaluated = 0
+    viz_saved = 0
 
     valid_fids = sorted([f for f in fts if f"mask_{f:010d}" in z_mask])
     bench_fids = [f for f in valid_fids if 15 <= f <= 120]
+    if args.max_frames > 0:
+        bench_fids = bench_fids[:args.max_frames]
+
     print(f"Ewaluacja na {len(bench_fids)} klatkach sekwencji {seq_path.name}...")
 
     for fid in bench_fids:
@@ -71,6 +151,7 @@ def main():
         q_wc = cam_q[idx:idx+1]
         q_cw = qconj(q_wc)
         v_cam = qrot(q_cw, v_world[None, :])[0]
+        speed = float(np.linalg.norm(v_cam))
 
         win = ev.prep_window(tsf, 0.040, t_ev, xy_ev, intr)
         xs, ys = ev.warp(win, cal_ts, cal_w, -0.0309)
@@ -138,6 +219,12 @@ def main():
         tot_tp2 += int((pred_v2 & posm).sum())
         tot_fp2 += int((pred_v2 & negm).sum())
         tot_fn2 += int(((~pred_v2) & posm).sum())
+
+        if args.viz > 0 and viz_saved < args.viz:
+            save_p = viz_dir / f"frame_{fid:04d}_comparison.png"
+            render_comparison_panel(win, xs, ys, posm, negm, pred_v1, pred_v2, clusters, fmask, v_cam, fid, speed, save_p)
+            viz_saved += 1
+            print(f"      [Wizualizacja] Zapisano klatkę {fid} do: {save_p}")
 
         tot_events += len(xs)
         frames_evaluated += 1

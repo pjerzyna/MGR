@@ -13,6 +13,7 @@
 #include "calibration.hpp"
 #include "rotcomp.hpp"
 #include "detector.hpp"
+#include "epipolar.hpp"
 #include "viz.hpp"
 #include "npy.hpp"
 
@@ -31,6 +32,14 @@ struct AppArgs {
     std::string out_dir = "";
     std::string json_path = "";
     int warmup = 0;
+
+    // Filtr epipolarny FOE (v2)
+    bool epipolar = false;
+    double epipolar_thresh = 35.0;       // [deg]
+    double epipolar_min_speed = 0.05;    // [m/s]
+    int epipolar_max_shift = 8;          // [px]
+    bool has_vcam_override = false;
+    Vec3 vcam_override{0.0, 0.0, 0.0};
 
     // Wizualizacja
     std::string viz_dir = "";
@@ -62,6 +71,17 @@ static bool parse_args(int argc, char** argv, AppArgs& a) {
         else if (s == "--json" && need(1)) a.json_path = argv[++i];
         else if (s == "--warmup" && need(1)) a.warmup = std::atoi(argv[++i]);
         else if (s == "--out" && need(1)) a.out_dir = argv[++i];
+        else if (s == "--epipolar") a.epipolar = true;
+        else if (s == "--epipolar-thresh" && need(1)) a.epipolar_thresh = std::atof(argv[++i]);
+        else if (s == "--epipolar-min-speed" && need(1)) a.epipolar_min_speed = std::atof(argv[++i]);
+        else if (s == "--epipolar-max-shift" && need(1)) a.epipolar_max_shift = std::atoi(argv[++i]);
+        else if (s == "--vcam" && need(3)) {
+            a.has_vcam_override = true;
+            a.epipolar = true;
+            a.vcam_override.x = std::atof(argv[++i]);
+            a.vcam_override.y = std::atof(argv[++i]);
+            a.vcam_override.z = std::atof(argv[++i]);
+        }
         else if (s == "--viz" && need(1)) a.viz_dir = argv[++i];
         else if (s == "--viz-mode" && need(1)) a.viz_mode = argv[++i];
         else if (s == "--viz-theme" && need(1)) a.viz_theme = argv[++i];
@@ -72,6 +92,7 @@ static bool parse_args(int argc, char** argv, AppArgs& a) {
         else if (s == "--viz-stride" && need(1)) a.viz_stride = std::atoi(argv[++i]);
         else if (s == "--viz-only-imo") a.viz_only_imo = true;
         else if (s == "--no-boxes") a.viz_boxes = "none";
+        else if (s == "--png") a.png = true;
         else if (s == "--no-png") a.png = false;
         else return false;
     }
@@ -116,7 +137,13 @@ int main(int argc, char** argv) {
                   << "  --support F     Mnożnik progu wsparcia S (domyślnie 1.0)\n"
                   << "  --min-cells N   Min. liczba komórek 4x4 w klastrze (domyślnie 8)\n"
                   << "  --lag-ms F      Opóźnienie IMU w ms (domyślnie -15.7)\n"
+                  << "  --epipolar      Włącz filtr geometryczny FOE / linii epipolarnych (v2)\n"
+                  << "  --epipolar-thresh DEG Kąt progowy w stopniach (domyślnie 35.0)\n"
+                  << "  --epipolar-min-speed V Min. prędkość kamery do aktywacji filtru (domyślnie 0.05)\n"
+                  << "  --epipolar-max-shift S Max dopuszczalne przesunięcie NCC w px (domyślnie 8)\n"
+                  << "  --vcam VX VY VZ Wymuszenie wektora prędkości kamery w m/s\n"
                   << "  --out DIR       Katalog wyjściowy wyników numerycznych\n"
+                  << "  --json FILE     Zapisz podsumowanie metryk do pliku JSON\n"
                   << "  --viz DIR       Katalog zapisu wizualizacji (włącza rendering klatek)\n"
                   << "  --viz-mode M    Tryb: both (1280x480, domyślny), sensor (640x480), warped (640x480)\n"
                   << "  --viz-theme T   Motyw: dark (neonowy, domyślny), light (papierowy)\n"
@@ -126,6 +153,7 @@ int main(int argc, char** argv) {
                   << "  --no-boxes      Wyłącz całkowicie rysowanie ramek (pokazuj czystą mapę zdarzeń)\n"
                   << "  --viz-stride N  Zapisuj co N-te okno czasowe (domyślnie 1)\n"
                   << "  --viz-only-imo  Zapisuj tylko okna, w których wykryto klastry IMO\n"
+                  << "  --png           Generuj pliki PNG obok PPM (domyślnie włączone)\n"
                   << "  --no-png        Pomiń automatyczną konwersję ImageMagick PPM do PNG\n";
         return 1;
     }
@@ -221,6 +249,31 @@ int main(int argc, char** argv) {
         cal_w[i] = calibrated_gyro(raw_gyro, R, bias);
     }
 
+    // 3b. Wczytanie prędkości liniowej kamery (do filtru epipolarnego FOE v2)
+    fs::path vel_p = seq_p / "dataset_cam_velocity.npy";
+    std::vector<double> cam_vel_ts;
+    std::vector<Vec3> cam_vel_v;
+    bool has_cam_vel = false;
+    if (fs::exists(vel_p)) {
+        try {
+            NpyArray npy_vel(vel_p.string());
+            size_t n_vel = npy_vel.shape()[0];
+            cam_vel_ts.resize(n_vel);
+            cam_vel_v.resize(n_vel);
+            npy_vel.visit([&](auto* ptr) {
+                for (size_t i = 0; i < n_vel; ++i) {
+                    cam_vel_ts[i] = static_cast<double>(ptr[i * 4 + 0]);
+                    cam_vel_v[i]  = Vec3{static_cast<double>(ptr[i * 4 + 1]),
+                                         static_cast<double>(ptr[i * 4 + 2]),
+                                         static_cast<double>(ptr[i * 4 + 3])};
+                }
+            });
+            has_cam_vel = true;
+        } catch (...) {
+            has_cam_vel = false;
+        }
+    }
+
     double wlen = a.window_ms * 1e-3;
     double step = a.step_ms * 1e-3;
     double lag_s = a.lag_ms * 1e-3;
@@ -244,17 +297,26 @@ int main(int argc, char** argv) {
     std::cout << "  Konfiguracja    : okno " << a.window_ms << " ms, krok " << a.step_ms
               << " ms, max okien: " << window_centers.size() << "\n";
     std::cout << "  Parametry       : blur " << a.blur << " (2x), tau " << a.tau
-              << ", support " << a.support << ", min_cells " << a.min_cells << "\n";
+              << ", support " << a.support << ", min_cells " << a.min_cells;
+    if (a.epipolar) {
+        std::cout << " | FOE epipolar: theta < " << a.epipolar_thresh << " deg";
+        if (has_cam_vel || a.has_vcam_override) std::cout << " (v_cam active)";
+        else std::cout << " (v_cam: no data)";
+    }
+    std::cout << "\n";
     std::cout << "================================================================================\n";
     std::cout << std::setw(6)  << "Okno"
               << std::setw(12) << "t_c [s]"
               << std::setw(12) << "Zdarzeń"
-              << std::setw(10) << "Klastry"
+              << std::setw(10) << (a.epipolar ? "Klastry" : "Klastry")
               << std::setw(12) << "Zdarz. IMO"
               << std::setw(12) << "Undistort"
               << std::setw(10) << "Warp"
-              << std::setw(10) << "Detect"
-              << std::setw(12) << "Suma [ms]" << "\n";
+              << std::setw(10) << "Detect";
+    if (a.epipolar) {
+        std::cout << std::setw(10) << "Epipolar";
+    }
+    std::cout << std::setw(12) << "Suma [ms]" << "\n";
     std::cout << "--------------------------------------------------------------------------------\n";
 
     DetectParams det_params;
@@ -267,6 +329,7 @@ int main(int argc, char** argv) {
     double total_undist_ms = 0.0;
     double total_warp_ms = 0.0;
     double total_det_ms = 0.0;
+    double total_epi_ms = 0.0;
     size_t processed_events = 0;
     int processed_windows = 0;
 
@@ -336,21 +399,57 @@ int main(int argc, char** argv) {
 
         auto t2 = std::chrono::high_resolution_clock::now();
 
-        // 3. Detect IMO
-        DetectResult res = detect_imo(xs.data(), ys.data(), te.data(), n, tc, det_params);
+        // 3. Detect IMO v1
+        std::vector<float> Es, Ls;
+        DetectResult res = detect_imo(xs.data(), ys.data(), te.data(), n, tc, det_params, &Es, &Ls);
+        auto t2_det_end = std::chrono::high_resolution_clock::now();
 
-        auto t3 = std::chrono::high_resolution_clock::now();
+        // 3b. Epipolar filter FOE (v2)
+        int v1_clusters = res.n_clusters;
+        size_t v1_imo_count = 0;
+        for (bool b : res.is_imo) v1_imo_count += b;
+
+        Vec3 v_cam{0.0, 0.0, 0.0};
+        if (a.has_vcam_override) {
+            v_cam = a.vcam_override;
+        } else if (has_cam_vel && !cam_vel_ts.empty()) {
+            auto it = std::lower_bound(cam_vel_ts.begin(), cam_vel_ts.end(), tc);
+            size_t idx = std::distance(cam_vel_ts.begin(), it);
+            if (idx == 0) v_cam = cam_vel_v[0];
+            else if (idx >= cam_vel_ts.size()) v_cam = cam_vel_v.back();
+            else {
+                double dt = cam_vel_ts[idx] - cam_vel_ts[idx - 1];
+                double alpha = (dt > 1e-6) ? (tc - cam_vel_ts[idx - 1]) / dt : 0.0;
+                v_cam = cam_vel_v[idx - 1] * (1.0 - alpha) + cam_vel_v[idx] * alpha;
+            }
+        }
+
+        std::vector<ClusterEpipolarInfo> epi_info;
+        double d_epi = 0.0;
+        if (a.epipolar && (v_cam.norm() >= a.epipolar_min_speed || a.has_vcam_override)) {
+            auto t_epi_0 = std::chrono::high_resolution_clock::now();
+            EpipolarParams epi_params;
+            epi_params.min_speed = a.epipolar_min_speed;
+            epi_params.angle_thresh_deg = a.epipolar_thresh;
+            epi_params.max_shift = a.epipolar_max_shift;
+            epi_params.enabled = true;
+
+            epi_info = filter_clusters_epipolar(res, Es.data(), Ls.data(), v_cam, intr, epi_params);
+            auto t_epi_1 = std::chrono::high_resolution_clock::now();
+            d_epi = std::chrono::duration<double, std::milli>(t_epi_1 - t_epi_0).count();
+        }
 
         double d_undist = std::chrono::duration<double, std::milli>(t1 - t0).count();
         double d_warp   = std::chrono::duration<double, std::milli>(t2 - t1).count();
-        double d_det    = std::chrono::duration<double, std::milli>(t3 - t2).count();
-        double d_sum    = d_undist + d_warp + d_det;
+        double d_det    = std::chrono::duration<double, std::milli>(t2_det_end - t2).count();
+        double d_sum    = d_undist + d_warp + d_det + d_epi;
 
         bool is_warmup = (static_cast<int>(win_idx) < a.warmup);
         if (!is_warmup) {
             total_undist_ms += d_undist;
             total_warp_ms   += d_warp;
             total_det_ms    += d_det;
+            total_epi_ms    += d_epi;
             total_time_ms   += d_sum;
             processed_events += n;
             ++processed_windows;
@@ -361,13 +460,21 @@ int main(int argc, char** argv) {
 
         std::cout << std::setw(6)  << (is_warmup ? "warm" : std::to_string(processed_windows))
                   << std::setw(12) << std::fixed << std::setprecision(4) << tc
-                  << std::setw(12) << n
-                  << std::setw(10) << res.n_clusters
-                  << std::setw(12) << imo_count
+                  << std::setw(12) << n;
+        if (a.epipolar) {
+            std::string cl_str = std::to_string(v1_clusters) + "->" + std::to_string(res.n_clusters);
+            std::cout << std::setw(10) << cl_str;
+        } else {
+            std::cout << std::setw(10) << res.n_clusters;
+        }
+        std::cout << std::setw(12) << imo_count
                   << std::setw(11) << std::setprecision(2) << d_undist << " ms"
                   << std::setw(9)  << std::setprecision(2) << d_warp << " ms"
-                  << std::setw(9)  << std::setprecision(2) << d_det << " ms"
-                  << std::setw(11) << std::setprecision(2) << d_sum << " ms" << "\n";
+                  << std::setw(9)  << std::setprecision(2) << d_det << " ms";
+        if (a.epipolar) {
+            std::cout << std::setw(7) << std::setprecision(2) << d_epi << " ms";
+        }
+        std::cout << std::setw(11) << std::setprecision(2) << d_sum << " ms" << "\n";
 
         // 4. Wizualizacja klastrów IMO (jeśli podano --viz)
         if (!a.viz_dir.empty()) {
@@ -470,7 +577,11 @@ int main(int argc, char** argv) {
     std::cout << "  Średni czas per okno     : " << (total_time_ms / processed_windows) << " ms "
               << " (undistort: " << (total_undist_ms / processed_windows) << " ms, "
               << "warp: " << (total_warp_ms / processed_windows) << " ms, "
-              << "detect: " << (total_det_ms / processed_windows) << " ms)\n";
+              << "detect: " << (total_det_ms / processed_windows) << " ms";
+    if (a.epipolar) {
+        std::cout << ", epipolar: " << (total_epi_ms / processed_windows) << " ms";
+    }
+    std::cout << ")\n";
 
     double throughput_mev = (processed_events / (total_time_ms * 1e-3)) * 1e-6;
     std::cout << "  Średnia przepustowość     : " << std::setprecision(2) << throughput_mev << " Mev/s\n";
@@ -496,6 +607,9 @@ int main(int argc, char** argv) {
                << "  \"min_cells\": " << a.min_cells << ",\n"
                << "  \"lag_ms\": " << a.lag_ms << ",\n"
                << "  \"warmup_windows\": " << a.warmup << ",\n"
+               << "  \"epipolar_enabled\": " << (a.epipolar ? "true" : "false") << ",\n"
+               << "  \"epipolar_thresh_deg\": " << a.epipolar_thresh << ",\n"
+               << "  \"epipolar_min_speed\": " << a.epipolar_min_speed << ",\n"
                << "  \"processed_windows\": " << processed_windows << ",\n"
                << "  \"processed_events\": " << processed_events << ",\n"
                << "  \"total_time_ms\": " << total_time_ms << ",\n"
@@ -503,6 +617,7 @@ int main(int argc, char** argv) {
                << "  \"avg_undist_ms\": " << (processed_windows ? (total_undist_ms / processed_windows) : 0.0) << ",\n"
                << "  \"avg_warp_ms\": " << (processed_windows ? (total_warp_ms / processed_windows) : 0.0) << ",\n"
                << "  \"avg_detect_ms\": " << (processed_windows ? (total_det_ms / processed_windows) : 0.0) << ",\n"
+               << "  \"avg_epipolar_ms\": " << (processed_windows ? (total_epi_ms / processed_windows) : 0.0) << ",\n"
                << "  \"throughput_mev\": " << throughput_mev << ",\n"
                << "  \"rt_factor\": " << rt_factor << "\n"
                << "}\n";

@@ -81,6 +81,7 @@ inline void box_blur(const float* img, float* out, int W, int H, int r) {
 inline bool residual_map(const float* xs, const float* ys, const double* te,
                          size_t n, double tc, int r,
                          std::vector<float>& out_D, std::vector<float>& out_S,
+                         std::vector<float>* out_E = nullptr, std::vector<float>* out_L = nullptr,
                          int W = DEFAULT_W, int H = DEFAULT_H, float eps = 1e-12f) {
     out_D.assign(W * H, 0.0f);
     out_S.assign(W * H, 0.0f);
@@ -141,6 +142,9 @@ inline bool residual_map(const float* xs, const float* ys, const double* te,
         out_S[i] = s;
         out_D[i] = d;
     }
+
+    if (out_E) *out_E = std::move(E);
+    if (out_L) *out_L = std::move(L);
 
     return true;
 }
@@ -291,7 +295,9 @@ inline std::vector<bool> fill_holes(const std::vector<bool>& g, int W, int H) {
 // Główna funkcja detekcji IMO v0
 inline DetectResult detect_imo(const float* xs, const float* ys,
                                const double* te, size_t n, double tc,
-                               const DetectParams& params,
+                               const DetectParams& params = DetectParams(),
+                               std::vector<float>* out_E = nullptr,
+                               std::vector<float>* out_L = nullptr,
                                int W = DEFAULT_W, int H = DEFAULT_H) {
     DetectResult result;
     result.is_imo.assign(n, false);
@@ -299,7 +305,7 @@ inline DetectResult detect_imo(const float* xs, const float* ys,
     result.n_clusters = 0;
 
     std::vector<float> D, S;
-    if (!residual_map(xs, ys, te, n, tc, params.blur, D, S, W, H)) {
+    if (!residual_map(xs, ys, te, n, tc, params.blur, D, S, out_E, out_L, W, H)) {
         return result;
     }
 

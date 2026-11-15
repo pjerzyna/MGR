@@ -13,6 +13,7 @@
 #include "calibration.hpp"
 #include "rotcomp.hpp"
 #include "detector.hpp"
+#include "epipolar.hpp"
 #include "npy.hpp"
 
 using namespace evimo2;
@@ -242,6 +243,107 @@ void test_python_reference(const std::string& data_dir) {
     std::cout << " -> ZGODNOŚĆ 100% (OK)\n";
 }
 
+void test_epipolar() {
+    std::cout << "[8/8] Testowanie modułu geometrii epipolarnej i FOE (epipolar.hpp)... ";
+
+    // 1. Test epipolar_direction przy czystej translacji w Y
+    CameraIntrinsics intr;
+    intr.fx = 500.0; intr.fy = 500.0;
+    intr.cx = 320.0; intr.cy = 240.0;
+
+    Vec3 v_cam_y{0.0, -0.2, 0.0};
+    auto [u_epi_y, norm_y] = epipolar_direction(320.0, 240.0, v_cam_y, intr);
+    assert(norm_y > 0.0);
+    assert(std::abs(u_epi_y.x - 0.0) < 1e-5 && std::abs(u_epi_y.y - 1.0) < 1e-5);
+
+    // 2. Test FOE przy ekspansji w Z (+Z)
+    Vec3 v_cam_z{0.0, 0.0, 1.0};
+    auto [u_epi_c, norm_c] = epipolar_direction(320.0, 240.0, v_cam_z, intr);
+    assert(norm_c < 1e-5); // W centrum obrazu prędkość pozorna tła = 0
+
+    auto [u_epi_tr, norm_tr] = epipolar_direction(420.0, 140.0, v_cam_z, intr);
+    assert(u_epi_tr.x > 0.0 && u_epi_tr.y < 0.0); // W prawo-górę
+
+    // 3. Test estymacji przesunięcia NCC na syntetycznym wycinku
+    int W = 100, H = 100;
+    std::vector<float> Es(W * H, 0.0f);
+    std::vector<float> Ls(W * H, 0.0f);
+
+    // Obiekt kwadratowy w Es w pozycji (40..50, 40..50)
+    for (int y = 40; y < 50; ++y) {
+        for (int x = 40; x < 50; ++x) {
+            Es[y * W + x] = 1.0f;
+        }
+    }
+    // W Ls przesunięty o dx = +2, dy = -3 -> pozycja (37..47, 42..52)
+    for (int y = 37; y < 47; ++y) {
+        for (int x = 42; x < 52; ++x) {
+            Ls[y * W + x] = 1.0f;
+        }
+    }
+
+    auto [shift, corr] = estimate_cluster_shift(Es.data(), Ls.data(), 35, 55, 35, 55, W, H, 5);
+    assert(shift.first == 2 && shift.second == -3);
+    assert(corr > 0.99f);
+
+    // 4. Test separacji epipolarnej IMO vs paralaksa tła
+    int W_full = DEFAULT_W, H_full = DEFAULT_H;
+    std::vector<float> E_full(W_full * H_full, 0.0f);
+    std::vector<float> L_full(W_full * H_full, 0.0f);
+
+    // Klaster 1: Tło / paralaksa (przesunięcie w dół: dx = 0, dy = +2)
+    for (int y = 100; y < 120; ++y) {
+        for (int x = 200; x < 220; ++x) {
+            E_full[y * W_full + x] = 1.0f;
+            L_full[(y + 2) * W_full + x] = 1.0f;
+        }
+    }
+
+    // Klaster 2: IMO (przesunięcie w lewo: dx = -4, dy = 0)
+    for (int y = 300; y < 320; ++y) {
+        for (int x = 400; x < 420; ++x) {
+            E_full[y * W_full + x] = 1.0f;
+            L_full[y * W_full + (x - 4)] = 1.0f;
+        }
+    }
+
+    DetectResult det_res;
+    det_res.n_clusters = 2;
+    det_res.clusters.resize(2);
+    det_res.clusters[0].id = 1;
+    det_res.clusters[0].x_min = 200; det_res.clusters[0].x_max = 219;
+    det_res.clusters[0].y_min = 100; det_res.clusters[0].y_max = 119;
+
+    det_res.clusters[1].id = 2;
+    det_res.clusters[1].x_min = 400; det_res.clusters[1].x_max = 419;
+    det_res.clusters[1].y_min = 300; det_res.clusters[1].y_max = 319;
+
+    det_res.is_imo.assign(200, true);
+    det_res.event_cluster.assign(200, 1);
+    for (int i = 100; i < 200; ++i) det_res.event_cluster[i] = 2;
+
+    EpipolarParams epi_params;
+    epi_params.min_speed = 0.05;
+    epi_params.angle_thresh_deg = 30.0;
+
+    auto filtered = filter_clusters_epipolar(det_res, E_full.data(), L_full.data(), v_cam_y, intr, epi_params, W_full, H_full);
+
+    // Klaster 1 powinien zostać odrzucony jako paralaksa (angle ~ 0 deg)
+    assert(!filtered[0].is_imo);
+    assert(filtered[0].angle_deg < 5.0);
+
+    // Klaster 2 powinien zostać zachowany jako IMO (angle ~ 90 deg)
+    assert(filtered[1].is_imo);
+    assert(filtered[1].angle_deg > 80.0);
+    assert(det_res.n_clusters == 1);
+
+    // Sprawdzenie etykiet zdarzeń: zdarzenia z klastra 1 powinny mieć is_imo = false, a z klastra 2 is_imo = true
+    for (int i = 0; i < 100; ++i) assert(!det_res.is_imo[i]);
+    for (int i = 100; i < 200; ++i) assert(det_res.is_imo[i]);
+
+    std::cout << "OK\n";
+}
+
 int main(int argc, char** argv) {
     std::cout << "============================================================\n";
     std::cout << "      TESTY JEDNOSTKOWE I WALIDACJA NUMERYCZNA C++ (EVIMO2) \n";
@@ -256,6 +358,7 @@ int main(int argc, char** argv) {
         data_dir = argv[1];
     }
     test_python_reference(data_dir);
+    test_epipolar();
 
     std::cout << "============================================================\n";
     std::cout << "           WSZYSTKIE TESTY ZAKOŃCZONE SUKCESEM!             \n";

@@ -85,6 +85,12 @@ python scripts/run_epipolar_foe.py          # Ewaluacja na sekwencji z silną tr
 ### 3. Kompilacja i bezpośrednie wywołanie silnika C++:
 ```bash
 make -C cpp
+
+# Detektor bazowy v1 (RotComp):
 ./cpp/bin/imo_detect data/npz_left_camera_imo/left_camera/imo/train/scene6_dyn_train_03_000000 \
     --window-ms 40 --step-ms 40 --blur 3 --tau 0.5 --lag-ms 14.3
+
+# Detektor v2 z aktywnym filtrem epipolarnym FOE (odrzucanie paralaksy translacji):
+./cpp/bin/imo_detect data/npz_left_camera_imo/left_camera/imo/train/scene13_dyn_test_01_000000 \
+    --epipolar --epipolar-thresh 35.0 --blur 3 --tau 0.3 --max-windows 50
 ```
