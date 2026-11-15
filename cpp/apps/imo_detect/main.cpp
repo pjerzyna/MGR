@@ -29,6 +29,8 @@ struct AppArgs {
     int min_cells = 8;
     double lag_ms = -15.7;
     std::string out_dir = "";
+    std::string json_path = "";
+    int warmup = 0;
 
     // Wizualizacja
     std::string viz_dir = "";
@@ -57,6 +59,8 @@ static bool parse_args(int argc, char** argv, AppArgs& a) {
         else if (s == "--support" && need(1)) a.support = static_cast<float>(std::atof(argv[++i]));
         else if (s == "--min-cells" && need(1)) a.min_cells = std::atoi(argv[++i]);
         else if (s == "--lag-ms" && need(1)) a.lag_ms = std::atof(argv[++i]);
+        else if (s == "--json" && need(1)) a.json_path = argv[++i];
+        else if (s == "--warmup" && need(1)) a.warmup = std::atoi(argv[++i]);
         else if (s == "--out" && need(1)) a.out_dir = argv[++i];
         else if (s == "--viz" && need(1)) a.viz_dir = argv[++i];
         else if (s == "--viz-mode" && need(1)) a.viz_mode = argv[++i];
@@ -342,17 +346,20 @@ int main(int argc, char** argv) {
         double d_det    = std::chrono::duration<double, std::milli>(t3 - t2).count();
         double d_sum    = d_undist + d_warp + d_det;
 
-        total_undist_ms += d_undist;
-        total_warp_ms   += d_warp;
-        total_det_ms    += d_det;
-        total_time_ms   += d_sum;
-        processed_events += n;
-        ++processed_windows;
+        bool is_warmup = (static_cast<int>(win_idx) < a.warmup);
+        if (!is_warmup) {
+            total_undist_ms += d_undist;
+            total_warp_ms   += d_warp;
+            total_det_ms    += d_det;
+            total_time_ms   += d_sum;
+            processed_events += n;
+            ++processed_windows;
+        }
 
         size_t imo_count = 0;
         for (bool b : res.is_imo) imo_count += b;
 
-        std::cout << std::setw(6)  << processed_windows
+        std::cout << std::setw(6)  << (is_warmup ? "warm" : std::to_string(processed_windows))
                   << std::setw(12) << std::fixed << std::setprecision(4) << tc
                   << std::setw(12) << n
                   << std::setw(10) << res.n_clusters
@@ -475,6 +482,32 @@ int main(int argc, char** argv) {
                   << ", motyw: " << a.viz_theme << (a.png ? ", format: PPM + PNG" : ", format: PPM") << ")\n";
     }
     std::cout << "================================================================================\n";
+
+    if (!a.json_path.empty()) {
+        std::ofstream jf(a.json_path);
+        if (jf.is_open()) {
+            jf << "{\n"
+               << "  \"sequence\": \"" << seq_p.filename().string() << "\",\n"
+               << "  \"window_ms\": " << a.window_ms << ",\n"
+               << "  \"step_ms\": " << a.step_ms << ",\n"
+               << "  \"blur\": " << a.blur << ",\n"
+               << "  \"tau\": " << a.tau << ",\n"
+               << "  \"support\": " << a.support << ",\n"
+               << "  \"min_cells\": " << a.min_cells << ",\n"
+               << "  \"lag_ms\": " << a.lag_ms << ",\n"
+               << "  \"warmup_windows\": " << a.warmup << ",\n"
+               << "  \"processed_windows\": " << processed_windows << ",\n"
+               << "  \"processed_events\": " << processed_events << ",\n"
+               << "  \"total_time_ms\": " << total_time_ms << ",\n"
+               << "  \"avg_window_ms\": " << (processed_windows ? (total_time_ms / processed_windows) : 0.0) << ",\n"
+               << "  \"avg_undist_ms\": " << (processed_windows ? (total_undist_ms / processed_windows) : 0.0) << ",\n"
+               << "  \"avg_warp_ms\": " << (processed_windows ? (total_warp_ms / processed_windows) : 0.0) << ",\n"
+               << "  \"avg_detect_ms\": " << (processed_windows ? (total_det_ms / processed_windows) : 0.0) << ",\n"
+               << "  \"throughput_mev\": " << throughput_mev << ",\n"
+               << "  \"rt_factor\": " << rt_factor << "\n"
+               << "}\n";
+        }
+    }
 
     return 0;
 }
