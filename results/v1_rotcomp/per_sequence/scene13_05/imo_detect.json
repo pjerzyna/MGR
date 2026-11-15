@@ -1,0 +1,75 @@
+{
+ "sequence": "scene13_dyn_test_05_000000",
+ "windows": 5,
+ "windows_with_fast_imo": 5,
+ "windows_hi_rotation": 5,
+ "params": {
+  "window_ms": 40.0,
+  "support": 1.0,
+  "min_cells": 8,
+  "blur": 3,
+  "tau": 0.5
+ },
+ "modes": {
+  "brak kompensacji": {
+   "all": {
+    "recall": 0.6822857973754044,
+    "precision": 0.06366451726699479,
+    "iou": 0.061831455010854845,
+    "fpr": 0.522728111960415,
+    "comps_median": 72.0,
+    "windows_det": 5,
+    "base_rate": 0.05209253530955093
+   },
+   "hi": {
+    "recall": 0.6822857973754044,
+    "precision": 0.06366451726699479,
+    "iou": 0.061831455010854845,
+    "fpr": 0.522728111960415,
+    "comps_median": 72.0,
+    "windows_det": 5,
+    "base_rate": 0.05209253530955093
+   }
+  },
+  "sta\u0142e d = -15.7 ms (mediana z 5 innych)": {
+   "all": {
+    "recall": 0.4479988367443382,
+    "precision": 0.07166282883260065,
+    "iou": 0.06584845878059598,
+    "fpr": 0.3023181168744479,
+    "comps_median": 73.0,
+    "windows_det": 5,
+    "base_rate": 0.05209253530955093
+   },
+   "hi": {
+    "recall": 0.4479988367443382,
+    "precision": 0.07166282883260065,
+    "iou": 0.06584845878059598,
+    "fpr": 0.3023181168744479,
+    "comps_median": 73.0,
+    "windows_det": 5,
+    "base_rate": 0.05209253530955093
+   }
+  },
+  "zero d = 0": {
+   "all": {
+    "recall": 0.5093787487731288,
+    "precision": 0.06732247525703854,
+    "iou": 0.0632228897316101,
+    "fpr": 0.3676103692720509,
+    "comps_median": 74.0,
+    "windows_det": 5,
+    "base_rate": 0.05209253530955093
+   },
+   "hi": {
+    "recall": 0.5093787487731288,
+    "precision": 0.06732247525703854,
+    "iou": 0.0632228897316101,
+    "fpr": 0.3676103692720509,
+    "comps_median": 74.0,
+    "windows_det": 5,
+    "base_rate": 0.05209253530955093
+   }
+  }
+ }
+}

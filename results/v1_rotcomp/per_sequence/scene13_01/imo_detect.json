@@ -1,0 +1,166 @@
+{
+ "sequence": "scene13_dyn_test_01_000000",
+ "windows": 40,
+ "windows_with_fast_imo": 17,
+ "windows_hi_rotation": 35,
+ "params": {
+  "window_ms": 40.0,
+  "support": 1.0,
+  "min_cells": 8,
+  "blur": 5,
+  "tau": 0.3
+ },
+ "modes": {
+  "brak kompensacji": {
+   "all": {
+    "recall": 0.40590995822804393,
+    "precision": 0.09559635206512088,
+    "iou": 0.08386271134672346,
+    "fpr": 0.1558788430549285,
+    "comps_median": 73.5,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "hi": {
+    "recall": 0.40590995822804393,
+    "precision": 0.09559635206512088,
+    "iou": 0.08386271134672346,
+    "fpr": 0.1608060765216873,
+    "comps_median": 74.0,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": 0.09324577861163227,
+    "vs_cam_speed": 0.8187617260787995
+   }
+  },
+  "sta\u0142e d = -15.7 ms (mediana z 5 innych)": {
+   "all": {
+    "recall": 0.35967430480348844,
+    "precision": 0.19111324913836147,
+    "iou": 0.14259654288005488,
+    "fpr": 0.06509978973574253,
+    "comps_median": 32.5,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "hi": {
+    "recall": 0.35967430480348844,
+    "precision": 0.19111324913836147,
+    "iou": 0.14259654288005488,
+    "fpr": 0.06539185236383674,
+    "comps_median": 30.0,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": -0.3647964034954913,
+    "vs_cam_speed": 0.7492963164390416
+   }
+  },
+  "zero d = 0": {
+   "all": {
+    "recall": 0.363874420550198,
+    "precision": 0.18147136317134088,
+    "iou": 0.13776548432584879,
+    "fpr": 0.0685693918740048,
+    "comps_median": 37.5,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "hi": {
+    "recall": 0.363874420550198,
+    "precision": 0.18147136317134088,
+    "iou": 0.13776548432584879,
+    "fpr": 0.06955887994056412,
+    "comps_median": 38.0,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": -0.32839182413431567,
+    "vs_cam_speed": 0.7507975362065127
+   }
+  },
+  "rotacja IMU + translacja (oracle)": {
+   "all": {
+    "recall": 0.3064480085262923,
+    "precision": 0.7893641516117605,
+    "iou": 0.2832830128714445,
+    "fpr": 0.008284449996787926,
+    "comps_median": 1.5,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "hi": {
+    "recall": 0.3064480085262923,
+    "precision": 0.7893641516117605,
+    "iou": 0.2832830128714445,
+    "fpr": 0.009177258903451276,
+    "comps_median": 2.0,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": 0.12426260432675952,
+    "vs_cam_speed": 0.1839834284172924
+   }
+  },
+  "rotacja GT (oracle)": {
+   "all": {
+    "recall": 0.35772609286094925,
+    "precision": 0.1932410514195154,
+    "iou": 0.14346546189076587,
+    "fpr": 0.06296272003126793,
+    "comps_median": 33.5,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "hi": {
+    "recall": 0.35772609286094925,
+    "precision": 0.1932410514195154,
+    "iou": 0.14346546189076587,
+    "fpr": 0.06319924482884277,
+    "comps_median": 33.0,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": -0.4058922946300142,
+    "vs_cam_speed": 0.7562394578635955
+   }
+  },
+  "rotacja+translacja GT (oracle)": {
+   "all": {
+    "recall": 0.3028839266784705,
+    "precision": 0.7870724698104499,
+    "iou": 0.2799453444833412,
+    "fpr": 0.00770368906946506,
+    "comps_median": 1.0,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "hi": {
+    "recall": 0.3028839266784705,
+    "precision": 0.7870724698104499,
+    "iou": 0.2799453444833412,
+    "fpr": 0.008530777441938515,
+    "comps_median": 1.0,
+    "windows_det": 17,
+    "base_rate": 0.0464575885732631
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": 0.05856726385083864,
+    "vs_cam_speed": 0.17391499367232083
+   }
+  }
+ },
+ "depth_valid_fraction_median": 0.6071666828601241
+}

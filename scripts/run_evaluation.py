@@ -27,7 +27,7 @@ SEQUENCES = [
     ("scene15_dyn_test_05_000000", "data/npz_left_camera_imo/left_camera/imo/eval/scene15_dyn_test_05_000000", "Ruch złożony (wysokie IMO)", "Kategoria III", -5.6),
 ]
 
-EVAL_DIR = Path("results/summaries/evaluation")
+EVAL_DIR = Path("results/v1_rotcomp/benchmark")
 EVAL_DIR.mkdir(parents=True, exist_ok=True)
 PYTHON_EXE = sys.executable
 CPP_BIN = Path("./cpp/bin/imo_detect")
@@ -104,7 +104,7 @@ def run_quality_evaluation(force=False):
 
         print(f"      [{seq_name[:26]:26s}] Przeliczanie siatki blur{{2,3,5}} x tau{{0.2..0.5}}...")
         cmd = [
-            PYTHON_EXE, "python/scripts/imo_detect.py",
+            PYTHON_EXE, "scripts/tools/imo_detect.py",
             seq_path,
             "--grid",
             "--grid-blur", "2", "3", "5",
@@ -119,8 +119,8 @@ def run_quality_evaluation(force=False):
 
 def generate_reports():
     print("\n[4/4] Generowanie tabel CSV, wykresów PNG oraz raportu Markdown...")
-    subprocess.run([PYTHON_EXE, "scripts/generate_eval_reports.py"], check=True)
-    print("      Wszystkie raporty i wykresy zostały wygenerowane w results/summaries/evaluation/")
+    subprocess.run([PYTHON_EXE, "scripts/tools/generate_eval_reports.py"], check=True)
+    print("      Wszystkie raporty i wykresy zostały wygenerowane w results/v1_rotcomp/benchmark/")
 
 
 def main():
@@ -151,7 +151,7 @@ def main():
     run_cpp_benchmark(force=args.clean)
     run_quality_evaluation(force=args.clean)
     generate_reports()
-    print("\nGotowe! Kompletna ewaluacja znajduje się w: results/summaries/evaluation/")
+    print("\nGotowe! Kompletna ewaluacja znajduje się w: results/v1_rotcomp/benchmark/")
 
 
 if __name__ == "__main__":

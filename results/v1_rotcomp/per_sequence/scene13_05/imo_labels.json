@@ -1,0 +1,225 @@
+{
+ "sequence": "scene13_dyn_test_05_000000",
+ "class_used": "R*S",
+ "thresholds": {
+  "v_thr": 0.05,
+  "w_thr": 1.0,
+  "half_ms": 25.0
+ },
+ "n_frames": 13,
+ "frames_without_ts": 131,
+ "ids_without_pose": [],
+ "imo_frac": {
+  "mean": 0.03586588541666667,
+  "p95": 0.03857747395833334,
+  "max": 0.038733723958333334,
+  "frames_with_imo": 1.0
+ },
+ "imo_frac_v_only": {
+  "mean": 0.03410657051282051,
+  "p95": 0.03587630208333333,
+  "max": 0.036214192708333336,
+  "frames_with_imo": 1.0
+ },
+ "imo_frac_by_v_thr": {
+  "0.05": {
+   "mean": 0.03410657051282051,
+   "p95": 0.03587630208333333,
+   "frames_with_imo": 1.0
+  },
+  "0.1": {
+   "mean": 0.03410657051282051,
+   "p95": 0.03587630208333333,
+   "frames_with_imo": 1.0
+  },
+  "0.3": {
+   "mean": 0.03410657051282051,
+   "p95": 0.03587630208333333,
+   "frames_with_imo": 1.0
+  },
+  "1.0": {
+   "mean": 0.01531650641025641,
+   "p95": 0.03351041666666667,
+   "frames_with_imo": 0.46153846153846156
+  }
+ },
+ "objects": {
+  "6": {
+   "frames_present": 13,
+   "frames_moving": 13,
+   "frames_moving_only_by_w": 0,
+   "frac_moving": 1.0,
+   "mean_area_frac": 0.03410657051282051,
+   "mean_area_frac_when_moving": 0.03410657051282051,
+   "v_p95": 1.240567277234404
+  },
+  "11": {
+   "frames_present": 13,
+   "frames_moving": 0,
+   "frames_moving_only_by_w": 0,
+   "frac_moving": 0.0,
+   "mean_area_frac": 0.010148988381410259,
+   "mean_area_frac_when_moving": 0.0,
+   "v_p95": 0.0009746810404537936
+  },
+  "14": {
+   "frames_present": 13,
+   "frames_moving": 5,
+   "frames_moving_only_by_w": 5,
+   "frac_moving": 0.38461538461538464,
+   "mean_area_frac": 0.004449869791666667,
+   "mean_area_frac_when_moving": 0.00457421875,
+   "v_p95": 0.013475124750528504
+  },
+  "22": {
+   "frames_present": 13,
+   "frames_moving": 0,
+   "frames_moving_only_by_w": 0,
+   "frac_moving": 0.0,
+   "mean_area_frac": 0.6763241185897435,
+   "mean_area_frac_when_moving": 0.0,
+   "v_p95": 0.001941523784539102
+  },
+  "24": {
+   "frames_present": 13,
+   "frames_moving": 0,
+   "frames_moving_only_by_w": 0,
+   "frac_moving": 0.0,
+   "mean_area_frac": 0.07522410857371796,
+   "mean_area_frac_when_moving": 0.0,
+   "v_p95": 0.0010280370495142637
+  }
+ },
+ "validation": {
+  "frames": 13,
+  "density_ratio": 1.1667585943835876,
+  "frac_events_in_imo": 0.05279312799765352,
+  "frac_area_in_imo": 0.04559169671474359,
+  "act_ms": 10.0,
+  "dilate_px": 6
+ },
+ "per_frame": [
+  {
+   "id": 134,
+   "ts": 2.25,
+   "moving_ids": [
+    "6"
+   ],
+   "imo_frac": 0.036214192708333336,
+   "imo_frac_v_only": 0.036214192708333336
+  },
+  {
+   "id": 135,
+   "ts": 2.266667,
+   "moving_ids": [
+    "6"
+   ],
+   "imo_frac": 0.03565104166666667,
+   "imo_frac_v_only": 0.03565104166666667
+  },
+  {
+   "id": 136,
+   "ts": 2.283333,
+   "moving_ids": [
+    "6"
+   ],
+   "imo_frac": 0.03519205729166667,
+   "imo_frac_v_only": 0.03519205729166667
+  },
+  {
+   "id": 137,
+   "ts": 2.3,
+   "moving_ids": [
+    "6"
+   ],
+   "imo_frac": 0.03478515625,
+   "imo_frac_v_only": 0.03478515625
+  },
+  {
+   "id": 138,
+   "ts": 2.316667,
+   "moving_ids": [
+    "6"
+   ],
+   "imo_frac": 0.034384765625,
+   "imo_frac_v_only": 0.034384765625
+  },
+  {
+   "id": 139,
+   "ts": 2.333333,
+   "moving_ids": [
+    "6",
+    "14"
+   ],
+   "imo_frac": 0.038733723958333334,
+   "imo_frac_v_only": 0.034153645833333336
+  },
+  {
+   "id": 140,
+   "ts": 2.35,
+   "moving_ids": [
+    "6",
+    "14"
+   ],
+   "imo_frac": 0.03847330729166667,
+   "imo_frac_v_only": 0.03388997395833333
+  },
+  {
+   "id": 141,
+   "ts": 2.366667,
+   "moving_ids": [
+    "6"
+   ],
+   "imo_frac": 0.03358072916666666,
+   "imo_frac_v_only": 0.03358072916666666
+  },
+  {
+   "id": 142,
+   "ts": 2.383333,
+   "moving_ids": [
+    "6",
+    "14"
+   ],
+   "imo_frac": 0.03796875,
+   "imo_frac_v_only": 0.033463541666666666
+  },
+  {
+   "id": 143,
+   "ts": 2.4,
+   "moving_ids": [
+    "6",
+    "14"
+   ],
+   "imo_frac": 0.03780924479166667,
+   "imo_frac_v_only": 0.03323567708333333
+  },
+  {
+   "id": 144,
+   "ts": 2.416667,
+   "moving_ids": [
+    "6"
+   ],
+   "imo_frac": 0.032939453125,
+   "imo_frac_v_only": 0.032939453125
+  },
+  {
+   "id": 145,
+   "ts": 2.433333,
+   "moving_ids": [
+    "6"
+   ],
+   "imo_frac": 0.032903645833333335,
+   "imo_frac_v_only": 0.032903645833333335
+  },
+  {
+   "id": 146,
+   "ts": 2.45,
+   "moving_ids": [
+    "6",
+    "14"
+   ],
+   "imo_frac": 0.03762044270833333,
+   "imo_frac_v_only": 0.03299153645833333
+  }
+ ]
+}

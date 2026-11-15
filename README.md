@@ -1,70 +1,90 @@
-# evimo2_tools
+# evimo2_tools: Detekcja Obiektów Ruchomych (IMO) z Kamer Zdarzeniowych i IMU
 
-Narzędzia w Pythonie i C++ do inspekcji, weryfikacji spójności, kompensacji ruchu i detekcji obiektów ruchomych (IMO) dla sekwencji **EVIMO2v2** (Prophesee, kamera lewa).
-Projekt stanowi bazę badawczą do pracy magisterskiej: *"Event camera and IMU data fusion for the detection of independently moving objects"*.
+Narzędzia w Pythonie i deterministyczny silnik C++ do kompensacji ruchu kamery ($SO(3)$) oraz detekcji niezależnie poruszających się obiektów (IMO) dla sekwencji **EVIMO2v2** (czujnik neuromorficzny Prophesee Gen3 VGA).
+Projekt stanowi bazę badawczo-inżynierską do pracy magisterskiej: *"Event camera and IMU data fusion for the detection of independently moving objects"*.
 
-Wymagania środowiskowe: Python >= 3.9 (dedykowane środowisko conda `mgr`), `numpy`, `matplotlib`, `pytest`.
-
----
-
-## Struktura projektu
-
-* `data/` – sekwencje danych wejściowych EVIMO2 (w `.gitignore`).
-  * `data/raw/train/` oraz `data/raw/eval/` – symlink do `npz_left_camera_imo/left_camera/imo/`.
-* `docs/` – dokumentacja badawcza i notatki:
-  * [`docs/IMPORTANT.md`](docs/IMPORTANT.md) – skonsolidowane ustalenia i wnioski eksperymentalne (konwencje poz, parametry kalibracji, jednostki głębi, tablica index, selekcja sekwencji).
-  * [`docs/notes.txt`](docs/notes.txt) – robocze notatki z inspekcji sekwencji.
-* `results/` – wyniki działania algorytmów (pliki JSON, wizualizacje PNG, maski):
-  * `results/summaries/` – tabele zbiorcze (`survey.csv`, `imo_labels.csv`, `object_motion.csv`).
-  * `results/sequences/<nazwa_sekwencji>/` – wyniki per sekwencja (`gyro_vs_gt.json`, `rotcomp_eval.json`, `imo_detect.json`, etc.).
-  * `out/` – symlink do `results/` zapewniający kompatybilność wsteczną.
-* `python/` – kod w Pythonie:
-  * `python/evimo2/` – pakiet biblioteczny (rdzeń algorytmów: `common`, `geometry`, `calibration`, `rotcomp`, `kinematics`, `detector`).
-  * `python/scripts/` – skrypty wykonywalne CLI:
-    * `rotcomp_eval.py` – ewaluacja kompensacji rotacji.
-    * `gyro_vs_gt.py` – kalibracja żyroskopu względem GT.
-    * `imo_detect.py` – prototyp detektora IMO v0.
-    * `gt_motion_viz.py` – wizualizacja czystego Ground Truth (obiekty z prędkościami i prawdziwe zdarzenia TP IMO).
-    * `imo_labels.py` / `object_motion.py` – etykietowanie dynamiki obiektów w czasie.
-    * `depth_check.py` / `check_sync.py` / `inspect_evimo2.py` – narzędzia diagnostyczne.
-    * `survey_sequences.py` – przegląd statystyk sekwencji EVIMO2.
-* `cpp/` – kod w C++:
-  * `cpp/CMakeLists.txt` – plik budowania CMake.
-  * `cpp/include/` – nagłówki (`events.hpp`, `npy.hpp`, `viz.hpp`).
-  * `cpp/src/` – źródła modułów.
-  * `cpp/apps/viewer/` – przeglądarka sekwencji EVIMO2 (`main.cpp`, `convert_to_png.sh`).
-* `tests/` – testy formatu i jednostkowe pakietu (`pytest tests/`).
+Wymagania środowiskowe: Python >= 3.9 (dedykowane środowisko conda `mgr`), `numpy`, `matplotlib`, `pytest`, kompilator C++17 (GCC/Clang).
 
 ---
 
-## Szybki start
+## 1. Struktura Projektu
 
-### Aktywacja środowiska:
+```text
+├── scripts/
+│   ├── run_evaluation.py        # Główny punkt wejścia v1: automatyczna ewaluacja 7 sekwencji
+│   ├── run_epipolar_foe.py      # Główny punkt wejścia v2: filtr geometrii epipolarnej i FOE
+│   └── tools/                   # Narzędzia diagnostyczne, kalibracyjne i przygotowania danych
+│       ├── imo_detect.py        # Referencyjny detektor okienkowy w Pythonie
+│       ├── generate_eval_reports.py  # Generator raportów CSV/Markdown i wykresów
+│       ├── analyze_operating_points.py # Analiza Pareto i indeksu Youdena
+│       ├── inspect_evimo2.py    # Narzędzie inspekcji sekwencji
+│       └── ...
+│
+├── python/
+│   └── evimo2/                  # Kanoniczna biblioteka algorytmów (Python package)
+│       ├── calibration.py       # Kalibracja IMU, opóźnienia czasowe i macierze rotacji
+│       ├── common.py            # Ładowanie zdarzeń i metadanych z EVIMO2
+│       ├── detector.py          # Obliczanie residual map, SAT box blur i klastrowanie CCL
+│       ├── epipolar.py          # Geometria epipolarna, FOE i 2D NCC filtr klastrów
+│       ├── geometry.py          # Kwaterniony, RadTan undistort, rzutowania pinhole
+│       ├── kinematics.py        # Trajektorie Ground Truth, prędkości obiektów i poz
+│       └── rotcomp.py           # Kompensacja rotacji SO(3) ze splattingiem biliniowym IWE
+│
+├── cpp/
+│   ├── include/                 # Nagłówki silnika C++ (rotcomp, detector, geometry, events)
+│   ├── apps/
+│   │   ├── imo_detect/          # Deterministyczny potok C++ (przepustowość >4 Mev/s)
+│   │   └── viewer/              # Szybka przeglądarka sekwencji EVIMO2
+│   ├── tests/                   # Rygorystyczne testy numerycznej zgodności z Pythonem
+│   └── Makefile                 # Budowanie binariów z flagami -O3 -std=c++17
+│
+├── results/
+│   ├── v1_rotcomp/              # Rozdział I: Kompensacja rotacji SO(3) z żyroskopu
+│   │   ├── benchmark/           # Zbiorcze wyniki ewaluacji C++ i Pythona (CSV, wykresy, raport)
+│   │   ├── per_sequence/        # Szczegółowe metryki i analizy per sekwencja
+│   │   └── visual_samples/      # Wyrenderowane ramki detekcji PNG/PPM
+│   │
+│   ├── v2_epipolar_foe/         # Rozdział II: Filtr geometrii epipolarnej (Focus of Expansion)
+│   │   ├── scene13_01_metrics.csv # Wyniki ewaluacji (redukcja FP o 5.42x, podwojenie F1)
+│   │   ├── epipolar_v2_validation_report.md
+│   │   └── epipolar_v2_comparison_frame60.png
+│   │
+│   └── archive/                 # Eksperymenty pomocnicze (np. Oracle GT depth)
+│
+├── tests/                       # Testy jednostkowe pytest (12/12 testów zaliczonych)
+└── scratch/                     # Pliki robocze i jednorazowe eksperymenty (git-ignored)
+```
+
+---
+
+## 2. Szybki Start i Przykłady Użycia
+
+### Aktywacja środowiska Conda
 ```bash
 conda activate mgr
 ```
 
-### Instalacja pakietu w trybie deweloperskim (wykonana w mgr):
+### Uruchomienie testów jednostkowych
 ```bash
-pip install -e .
+pytest tests/
+./cpp/bin/test_numerics
 ```
 
-### Uruchomienie testów:
+### 1. Zbiorcza ewaluacja detektora v1 na całym benchmarku EVIMO2 (7 sekwencji):
 ```bash
-EVIMO2_SEQ_DIR=data/raw/train/scene14_dyn_test_01_000000 pytest
+python scripts/run_evaluation.py            # Pełny potok end-to-end (C++ benchmark + jakość GT + wykresy)
+python scripts/run_evaluation.py --plots    # Szybkie wygenerowanie wykresów z istniejących wyników
+python scripts/run_evaluation.py --bench    # Tylko benchmark wydajnościowy C++ (throughput, latency)
 ```
 
-### Przykłady uruchomienia narzędzi:
+### 2. Uruchomienie ewaluacji detektora v2 (Filtr Epipolarny FOE):
 ```bash
-# 1. Sprawdzenie głębi i jednostek
-python python/scripts/depth_check.py data/raw/train/scene6_dyn_train_03_000000
+python scripts/run_epipolar_foe.py          # Ewaluacja na sekwencji z silną translacją (scene13_01)
+```
 
-# 2. Ewaluacja kompensacji rotacji
-python python/scripts/rotcomp_eval.py data/raw/eval/scene14_dyn_test_05_000000 --max-windows 10
-
-# 3. Uruchomienie detekcji IMO v0
-python python/scripts/imo_detect.py data/raw/eval/scene14_dyn_test_05_000000 --max-windows 10 --viz 5
-
-# 4. Wizualizacja czystego Ground Truth ruchu
-python python/scripts/gt_motion_viz.py data/raw/train/scene6_dyn_train_03_000000 --max-viz 5
+### 3. Kompilacja i bezpośrednie wywołanie silnika C++:
+```bash
+make -C cpp
+./cpp/bin/imo_detect data/npz_left_camera_imo/left_camera/imo/train/scene6_dyn_train_03_000000 \
+    --window-ms 40 --step-ms 40 --blur 3 --tau 0.5 --lag-ms 14.3
 ```

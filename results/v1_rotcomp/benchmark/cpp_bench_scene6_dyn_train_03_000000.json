@@ -1,0 +1,20 @@
+{
+  "sequence": "scene6_dyn_train_03_000000",
+  "window_ms": 40,
+  "step_ms": 40,
+  "blur": 3,
+  "tau": 0.5,
+  "support": 1,
+  "min_cells": 8,
+  "lag_ms": 14.3,
+  "warmup_windows": 2,
+  "processed_windows": 36,
+  "processed_events": 2366078,
+  "total_time_ms": 590.39,
+  "avg_window_ms": 16.3997,
+  "avg_undist_ms": 7.58925,
+  "avg_warp_ms": 4.02,
+  "avg_detect_ms": 4.79047,
+  "throughput_mev": 4.00765,
+  "rt_factor": 2.43907
+}

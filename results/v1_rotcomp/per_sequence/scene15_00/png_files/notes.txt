@@ -1,0 +1,4 @@
+Transformation done with imagemagick.
+
+# Command
+convert out/frame_002_pol.ppm out/frame_002_pol.png

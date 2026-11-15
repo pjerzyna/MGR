@@ -1,0 +1,191 @@
+{
+ "sequence": "scene14_dyn_test_04_000000",
+ "windows": 40,
+ "windows_with_fast_imo": 9,
+ "windows_hi_rotation": 10,
+ "params": {
+  "window_ms": 40.0,
+  "support": 1.0,
+  "min_cells": 8,
+  "blur": 5,
+  "tau": 0.3
+ },
+ "modes": {
+  "brak kompensacji": {
+   "all": {
+    "recall": 0.392145043671477,
+    "precision": 0.12952283048575777,
+    "iou": 0.10786644704046468,
+    "fpr": 0.2039826713421102,
+    "comps_median": 40.5,
+    "windows_det": 9,
+    "base_rate": 0.16975862463324867
+   },
+   "hi": {
+    "recall": 0.3838177463266106,
+    "precision": 0.10542963003323708,
+    "iou": 0.0901680500946556,
+    "fpr": 0.37903298373787614,
+    "comps_median": 50.5,
+    "windows_det": 7,
+    "base_rate": 0.14245457628076522
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": 0.13987522882314038,
+    "vs_cam_speed": 0.06435573908294723
+   }
+  },
+  "oracle d_GT = -15.7 ms": {
+   "all": {
+    "recall": 0.37099678127228386,
+    "precision": 0.2186920141848254,
+    "iou": 0.15953843990519417,
+    "fpr": 0.10762001075253733,
+    "comps_median": 31.0,
+    "windows_det": 9,
+    "base_rate": 0.16975862463324867
+   },
+   "hi": {
+    "recall": 0.3567167361755094,
+    "precision": 0.18154538066658926,
+    "iou": 0.1367687937544919,
+    "fpr": 0.1865496689756049,
+    "comps_median": 51.0,
+    "windows_det": 7,
+    "base_rate": 0.14245457628076522
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": -0.15593920334606648,
+    "vs_cam_speed": -0.23925690044071574
+   }
+  },
+  "sta\u0142e d = -16.7 ms (mediana z 4 innych)": {
+   "all": {
+    "recall": 0.37120558490625505,
+    "precision": 0.21900837011675395,
+    "iou": 0.15974541644484982,
+    "fpr": 0.10751752637427152,
+    "comps_median": 31.0,
+    "windows_det": 9,
+    "base_rate": 0.16975862463324867
+   },
+   "hi": {
+    "recall": 0.35699444094558475,
+    "precision": 0.18187399259255516,
+    "iou": 0.13699612926798635,
+    "fpr": 0.18632806068333851,
+    "comps_median": 52.0,
+    "windows_det": 7,
+    "base_rate": 0.14245457628076522
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": -0.1583786854682071,
+    "vs_cam_speed": -0.2390692479697818
+   }
+  },
+  "zero d = 0": {
+   "all": {
+    "recall": 0.3719856437652417,
+    "precision": 0.21607791803593823,
+    "iou": 0.15832214078631207,
+    "fpr": 0.10915228298814011,
+    "comps_median": 31.0,
+    "windows_det": 9,
+    "base_rate": 0.16975862463324867
+   },
+   "hi": {
+    "recall": 0.35577948257650516,
+    "precision": 0.17840286860990784,
+    "iou": 0.13484320230051405,
+    "fpr": 0.1895909197079174,
+    "comps_median": 53.0,
+    "windows_det": 7,
+    "base_rate": 0.14245457628076522
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": -0.15710935563717784,
+    "vs_cam_speed": -0.2512435752931452
+   }
+  },
+  "rotacja IMU + translacja (oracle)": {
+   "all": {
+    "recall": 0.36765986281995217,
+    "precision": 0.7353515932801714,
+    "iou": 0.32469651685901474,
+    "fpr": 0.019673433885330206,
+    "comps_median": 14.5,
+    "windows_det": 9,
+    "base_rate": 0.16975862463324867
+   },
+   "hi": {
+    "recall": 0.3512866161177865,
+    "precision": 0.768024806470499,
+    "iou": 0.31758940860528406,
+    "fpr": 0.010240887735057953,
+    "comps_median": 14.0,
+    "windows_det": 7,
+    "base_rate": 0.14245457628076522
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": -0.5671788975631302,
+    "vs_cam_speed": -0.6611426670196967
+   }
+  },
+  "rotacja GT (oracle)": {
+   "all": {
+    "recall": 0.36968880379155883,
+    "precision": 0.21872814746440658,
+    "iou": 0.15931524850509846,
+    "fpr": 0.10753440895166566,
+    "comps_median": 31.5,
+    "windows_det": 9,
+    "base_rate": 0.16975862463324867
+   },
+   "hi": {
+    "recall": 0.3529627627657411,
+    "precision": 0.18050863791756697,
+    "iou": 0.1356288765875549,
+    "fpr": 0.1862567439758921,
+    "comps_median": 50.5,
+    "windows_det": 7,
+    "base_rate": 0.14245457628076522
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": -0.14944415795792262,
+    "vs_cam_speed": -0.24851071841213876
+   }
+  },
+  "rotacja+translacja GT (oracle)": {
+   "all": {
+    "recall": 0.3704806817241665,
+    "precision": 0.728965442396242,
+    "iou": 0.32562649113026376,
+    "fpr": 0.020075762349427026,
+    "comps_median": 15.5,
+    "windows_det": 9,
+    "base_rate": 0.16975862463324867
+   },
+   "hi": {
+    "recall": 0.3542719423960963,
+    "precision": 0.758032341581427,
+    "iou": 0.3182792249740485,
+    "fpr": 0.011043081034925083,
+    "comps_median": 15.0,
+    "windows_det": 7,
+    "base_rate": 0.14245457628076522
+   },
+   "fpr_corr": {
+    "n": 40,
+    "vs_raw_rotation": -0.5373670992214886,
+    "vs_cam_speed": -0.654161423104249
+   }
+  }
+ },
+ "depth_valid_fraction_median": 0.6298609070990233
+}

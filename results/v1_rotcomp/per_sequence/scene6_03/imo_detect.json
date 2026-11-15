@@ -1,0 +1,115 @@
+{
+ "sequence": "scene6_dyn_train_03_000000",
+ "windows": 37,
+ "windows_with_fast_imo": 17,
+ "windows_hi_rotation": 0,
+ "params": {
+  "window_ms": 40.0,
+  "support": 1.0,
+  "min_cells": 8,
+  "blur": 5,
+  "tau": 0.3
+ },
+ "modes": {
+  "brak kompensacji": {
+   "all": {
+    "recall": 0.5253281271218296,
+    "precision": 0.9404347297604388,
+    "iou": 0.5084116243744257,
+    "fpr": 0.33356965296910196,
+    "comps_median": 22.0,
+    "windows_det": 17,
+    "base_rate": 4.876211589029001
+   },
+   "hi": {
+    "recall": NaN,
+    "precision": NaN,
+    "iou": NaN,
+    "fpr": NaN,
+    "comps_median": NaN,
+    "windows_det": 0,
+    "base_rate": NaN
+   },
+   "fpr_corr": {
+    "n": 37,
+    "vs_raw_rotation": 0.014698909435751539,
+    "vs_cam_speed": 0.016832622095779987
+   }
+  },
+  "oracle d_GT = +14.3 ms": {
+   "all": {
+    "recall": 0.5263820306980168,
+    "precision": 0.941228740045256,
+    "iou": 0.50963155342442,
+    "fpr": 0.33332959409859014,
+    "comps_median": 23.0,
+    "windows_det": 17,
+    "base_rate": 4.876211589029001
+   },
+   "hi": {
+    "recall": NaN,
+    "precision": NaN,
+    "iou": NaN,
+    "fpr": NaN,
+    "comps_median": NaN,
+    "windows_det": 0,
+    "base_rate": NaN
+   },
+   "fpr_corr": {
+    "n": 37,
+    "vs_raw_rotation": 0.02655286865813181,
+    "vs_cam_speed": 0.0047415836889521095
+   }
+  },
+  "sta\u0142e d = -15.7 ms (mediana z 5 innych)": {
+   "all": {
+    "recall": 0.5348673813399041,
+    "precision": 0.9420891714446162,
+    "iou": 0.5178414571174333,
+    "fpr": 0.3357593488347049,
+    "comps_median": 22.0,
+    "windows_det": 17,
+    "base_rate": 4.876211589029001
+   },
+   "hi": {
+    "recall": NaN,
+    "precision": NaN,
+    "iou": NaN,
+    "fpr": NaN,
+    "comps_median": NaN,
+    "windows_det": 0,
+    "base_rate": NaN
+   },
+   "fpr_corr": {
+    "n": 37,
+    "vs_raw_rotation": -0.009957325746799429,
+    "vs_cam_speed": 0.0007112375533428164
+   }
+  },
+  "zero d = 0": {
+   "all": {
+    "recall": 0.5288263784881649,
+    "precision": 0.9414069821828036,
+    "iou": 0.5119751922032639,
+    "fpr": 0.3371705360267789,
+    "comps_median": 21.0,
+    "windows_det": 17,
+    "base_rate": 4.876211589029001
+   },
+   "hi": {
+    "recall": NaN,
+    "precision": NaN,
+    "iou": NaN,
+    "fpr": NaN,
+    "comps_median": NaN,
+    "windows_det": 0,
+    "base_rate": NaN
+   },
+   "fpr_corr": {
+    "n": 37,
+    "vs_raw_rotation": 0.0002370791844476055,
+    "vs_cam_speed": -0.0023707918444760548
+   }
+  }
+ }
+}

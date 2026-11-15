@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
     CameraIntrinsics intr;
     fs::path intr_p = seq_p / "dataset_intrinsics.json";
     if (!load_intrinsics(intr_p.string(), intr)) {
-        std::cerr << "Błąd: Nie znaleziono " << intr_p << ". Uruchom python/scripts/prepare_cpp_data.py\n";
+        std::cerr << "Błąd: Nie znaleziono " << intr_p << ". Uruchom scripts/tools/prepare_cpp_data.py\n";
         return 2;
     }
 
@@ -203,7 +203,7 @@ int main(int argc, char** argv) {
     // 3. Wczytanie IMU
     fs::path imu_p = seq_p / "dataset_imu.npy";
     if (!fs::exists(imu_p)) {
-        std::cerr << "Błąd: Brak pliku " << imu_p << ". Uruchom python/scripts/prepare_cpp_data.py\n";
+        std::cerr << "Błąd: Brak pliku " << imu_p << ". Uruchom scripts/tools/prepare_cpp_data.py\n";
         return 3;
     }
     NpyArray npy_imu(imu_p.string());

@@ -74,6 +74,23 @@ def dev_deg(q: np.ndarray) -> np.ndarray:
     return np.degrees(qangle(np.repeat(q[:1], len(q), 0), q))
 
 
+def pose_series(traj: List[Dict[str, Any]], key: str) -> Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Wyciąga serie czasowe poz (ts, q_unit, pos_xyz) dla danego klucza (np. 'cam') z full_trajectory."""
+    rows = []
+    for e in traj:
+        ent = e.get(key)
+        pos = ent.get("pos") if isinstance(ent, dict) else None
+        if isinstance(pos, dict) and "q" in pos and "t" in pos:
+            rows.append((float(ent["ts"]), [pos["q"][k] for k in "wxyz"], [pos["t"][k] for k in "xyz"]))
+    if len(rows) < 2:
+        return None
+    rows.sort(key=lambda r: r[0])
+    ts = np.array([r[0] for r in rows], dtype=np.float64)
+    q = np.array([r[1] for r in rows], dtype=np.float64)
+    t = np.array([r[2] for r in rows], dtype=np.float64)
+    return ts, q / np.linalg.norm(q, axis=1, keepdims=True), t
+
+
 def world_pose(cls: str, qc: np.ndarray, tc: np.ndarray, qs: np.ndarray, ts_: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Złożenie pozy obiektu do układu świata w zależności od klasy konwencji."""
     from .geometry import qconj

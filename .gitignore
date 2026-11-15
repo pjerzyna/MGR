@@ -16,7 +16,11 @@ python/scripts/quick.py
 
 # Results & outputs
 /results/*
-!/results/summaries/
+!/results/v1_rotcomp/
+!/results/v2_epipolar_foe/
+!/results/archive/
+/scratch/
+*.so
 /out
 
 # C++ binaries & build

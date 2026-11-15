@@ -136,6 +136,9 @@ def default_out_root() -> Path:
     if "EVIMO2_OUT" in os.environ:
         return Path(os.environ["EVIMO2_OUT"])
     for cand in (
+        "results/v1_rotcomp/per_sequence",
+        "../results/v1_rotcomp/per_sequence",
+        "../../results/v1_rotcomp/per_sequence",
         "results/sequences",
         "../results/sequences",
         "../../results/sequences",
@@ -147,7 +150,7 @@ def default_out_root() -> Path:
         p = Path(cand)
         if p.is_dir():
             return p
-    return Path("results/sequences")
+    return Path("results/v1_rotcomp/per_sequence")
 
 
 def result_dir_candidates(seq_name: str, out_root: Optional[Union[str, Path]] = None) -> List[Path]:
