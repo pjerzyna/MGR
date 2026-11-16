@@ -1,0 +1,8 @@
+sequence,category,category_group,processed_windows,processed_events,total_time_ms,avg_window_ms,avg_undist_ms,avg_warp_ms,avg_detect_ms,avg_epipolar_ms,throughput_mev,rt_factor
+scene6_dyn_train_03_000000,Spoczynek (czyste IMO),Kategoria I,36,2366078,537.838,14.9399,6.22683,3.85122,4.86188,0,4.39924,2.67739
+scene14_dyn_test_05_000000,Czysta rotacja (wzorzec),Kategoria II,34,3081126,874.592,25.7233,9.58653,5.76792,6.16292,4.20593,3.52293,1.55501
+scene14_dyn_test_04_000000,Czysta rotacja (mały ruch),Kategoria II,37,4648575,1196.46,32.3366,12.1902,7.63426,6.57735,5.9348,3.88529,1.23699
+scene13_dyn_test_02_000000,Szybka rotacja (stress-test FPR),Kategoria II,38,4656308,1096.95,28.8671,12.9354,7.20176,5.461,3.26895,4.24478,1.38566
+scene13_dyn_test_01_000000,Ruch złożony (silna paralaksa),Kategoria III,38,8843398,2042.78,53.7573,22.2738,12.9856,7.71574,10.7822,4.32911,0.744085
+scene15_dyn_test_02_000000,Ruch złożony (duży udział IMO),Kategoria III,38,4728099,1173.62,30.8847,12.1837,7.98168,6.41555,4.30374,4.02866,1.29514
+scene15_dyn_test_05_000000,Ruch złożony (wysokie IMO),Kategoria III,19,2206444,516.134,27.165,12.6405,7.39369,7.13081,0,4.27494,1.47249

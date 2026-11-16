@@ -79,7 +79,9 @@ python scripts/run_evaluation.py --bench    # Tylko benchmark wydajnościowy C++
 
 ### 2. Uruchomienie ewaluacji detektora v2 (Filtr Epipolarny FOE):
 ```bash
-python scripts/run_epipolar_foe.py          # Ewaluacja na sekwencji z silną translacją (scene13_01)
+python scripts/run_evaluation_v2.py         # Pełna ewaluacja v1 vs v2 na 7 sekwencjach (wykresy, benchmark, ROC)
+python scripts/run_evaluation_v2.py --bench # Tylko benchmark C++ v2 (throughput, latency, narzut FOE)
+python scripts/run_epipolar_foe.py          # Pojedynczy test i wizualizacja na sekwencji z translacją (scene13_01)
 ```
 
 ### 3. Kompilacja i bezpośrednie wywołanie silnika C++:
