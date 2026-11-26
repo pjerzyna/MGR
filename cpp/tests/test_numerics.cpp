@@ -360,6 +360,37 @@ void test_epipolar() {
     std::cout << "OK\n";
 }
 
+void test_adaptive_slicer() {
+    std::cout << "[9/9] Testowanie okienkowania adaptacyjnego Dual-Trigger (rotcomp.hpp)... ";
+
+    // 1. Szybki ruch: 20 000 zdarzeń w 15 ms
+    std::vector<double> t_fast(20000);
+    for (size_t i = 0; i < 20000; ++i) t_fast[i] = 0.0 + (0.015 * i) / 19999.0;
+
+    AdaptiveWindowConfig cfg;
+    cfg.dt_min = 0.010;
+    cfg.dt_max = 0.040;
+    cfg.n_target = 10000;
+    cfg.n_min = 1000;
+
+    auto slices_fast = generate_adaptive_windows(t_fast.begin(), t_fast.end(), 0.0, 0.015, cfg);
+    assert(!slices_fast.empty());
+    assert(slices_fast[0].triggered_by_count);
+    assert(slices_fast[0].count >= 10000);
+
+    // 2. Wolny ruch: 5 000 zdarzeń w 50 ms
+    std::vector<double> t_slow(5000);
+    for (size_t i = 0; i < 5000; ++i) t_slow[i] = 0.0 + (0.050 * i) / 4999.0;
+
+    cfg.dt_max = 0.030;
+    auto slices_slow = generate_adaptive_windows(t_slow.begin(), t_slow.end(), 0.0, 0.050, cfg);
+    assert(!slices_slow.empty());
+    assert(!slices_slow[0].triggered_by_count);
+    assert(slices_slow[0].wlen <= 0.031);
+
+    std::cout << "OK\n";
+}
+
 int main(int argc, char** argv) {
     std::cout << "============================================================\n";
     std::cout << "      TESTY JEDNOSTKOWE I WALIDACJA NUMERYCZNA C++ (EVIMO2) \n";
@@ -375,6 +406,7 @@ int main(int argc, char** argv) {
     }
     test_python_reference(data_dir);
     test_epipolar();
+    test_adaptive_slicer();
 
     std::cout << "============================================================\n";
     std::cout << "           WSZYSTKIE TESTY ZAKOŃCZONE SUKCESEM!             \n";

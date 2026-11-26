@@ -34,6 +34,13 @@ struct AppArgs {
     int warmup = 0;
     bool use_lut = true;                 // Prekomputowana tablica LUT dla O(1) undistort (Raspberry Pi 5)
 
+    // Okienkowanie adaptacyjne hybrydowe (Bounded Adaptive Windowing - Gallego 2022, Gehrig 2020)
+    std::string slice_mode = "fixed";    // "fixed" (domyślny czasowy), "adaptive" (Dual-Trigger)
+    double dt_min_ms = 10.0;             // [ms] minimalny czas trwania okna (max 100 FPS)
+    double dt_max_ms = 40.0;             // [ms] maksymalny czas trwania okna (timeout min 25 FPS)
+    size_t n_target = 60000;             // docelowa liczba zdarzeń w oknie
+    size_t n_min = 5000;                 // minimalna liczba zdarzeń w oknie
+
     // Filtr epipolarny FOE (v2)
     bool epipolar = false;
     double epipolar_thresh = 35.0;       // [deg]
@@ -97,6 +104,11 @@ static bool parse_args(int argc, char** argv, AppArgs& a) {
         else if (s == "--no-png") a.png = false;
         else if (s == "--no-lut") a.use_lut = false;
         else if (s == "--lut") a.use_lut = true;
+        else if (s == "--slice-mode" && need(1)) a.slice_mode = argv[++i];
+        else if (s == "--dt-min-ms" && need(1)) a.dt_min_ms = std::atof(argv[++i]);
+        else if (s == "--dt-max-ms" && need(1)) a.dt_max_ms = std::atof(argv[++i]);
+        else if (s == "--n-target" && need(1)) a.n_target = static_cast<size_t>(std::atol(argv[++i]));
+        else if (s == "--n-min" && need(1)) a.n_min = static_cast<size_t>(std::atol(argv[++i]));
         else return false;
     }
     return true;
@@ -283,13 +295,28 @@ int main(int argc, char** argv) {
 
     double t_first_ev = get_time(0);
     double t_last_ev  = get_time(total_events - 1);
-    double t_start = std::max(t_first_ev, imu_ts[0]) + wlen / 2.0 + 0.06;
-    double t_end   = std::min(t_last_ev, imu_ts[n_imu - 1]) - wlen / 2.0 - 0.06;
+    double max_window_span = (a.slice_mode == "adaptive") ? (a.dt_max_ms * 1e-3) : wlen;
+    double t_start = std::max(t_first_ev, imu_ts[0]) + max_window_span / 2.0 + 0.06;
+    double t_end   = std::min(t_last_ev, imu_ts[n_imu - 1]) - max_window_span / 2.0 - 0.06;
 
-    std::vector<double> window_centers;
-    for (double tc = t_start; tc <= t_end; tc += step) {
-        window_centers.push_back(tc);
-        if (static_cast<int>(window_centers.size()) >= a.max_windows) break;
+    std::vector<WindowSlice> slices;
+    if (a.slice_mode == "adaptive") {
+        AdaptiveWindowConfig cfg;
+        cfg.dt_min = a.dt_min_ms * 1e-3;
+        cfg.dt_max = a.dt_max_ms * 1e-3;
+        cfg.n_target = a.n_target;
+        cfg.n_min = a.n_min;
+        if (ev_t_f) {
+            slices = generate_adaptive_windows(ev_t_f, ev_t_f + total_events, t_start, t_end, cfg, a.max_windows);
+        } else {
+            slices = generate_adaptive_windows(ev_t_d, ev_t_d + total_events, t_start, t_end, cfg, a.max_windows);
+        }
+    } else {
+        if (ev_t_f) {
+            slices = generate_fixed_windows(ev_t_f, ev_t_f + total_events, t_start, t_end, wlen, step, a.max_windows, a.n_min);
+        } else {
+            slices = generate_fixed_windows(ev_t_d, ev_t_d + total_events, t_start, t_end, wlen, step, a.max_windows, a.n_min);
+        }
     }
 
     std::cout << "================================================================================\n";
@@ -297,8 +324,13 @@ int main(int argc, char** argv) {
     std::cout << "  Zdarzeń w pliku : " << total_events << " (" << std::fixed << std::setprecision(2)
               << (t_last_ev - t_first_ev) << " s)\n";
     std::cout << "  Próbek IMU      : " << n_imu << " | Opóźnienie d = " << a.lag_ms << " ms\n";
-    std::cout << "  Konfiguracja    : okno " << a.window_ms << " ms, krok " << a.step_ms
-              << " ms, max okien: " << window_centers.size() << "\n";
+    std::cout << "  Okienkowanie    : tryb " << a.slice_mode;
+    if (a.slice_mode == "adaptive") {
+        std::cout << " (N_target=" << a.n_target << ", dt=[" << a.dt_min_ms << ".." << a.dt_max_ms << "] ms)";
+    } else {
+        std::cout << " (okno " << a.window_ms << " ms, krok " << a.step_ms << " ms)";
+    }
+    std::cout << ", okien do przetworzenia: " << slices.size() << "\n";
     std::cout << "  Parametry       : blur " << a.blur << " (2x), tau " << a.tau
               << ", support " << a.support << ", min_cells " << a.min_cells;
     if (a.epipolar) {
@@ -311,7 +343,9 @@ int main(int argc, char** argv) {
     std::cout << "================================================================================\n";
     std::cout << std::setw(6)  << "Okno"
               << std::setw(12) << "t_c [s]"
+              << std::setw(10) << "wlen [ms]"
               << std::setw(12) << "Zdarzeń"
+              << std::setw(8)  << "Tryb"
               << std::setw(10) << (a.epipolar ? "Klastry" : "Klastry")
               << std::setw(12) << "Zdarz. IMO"
               << std::setw(12) << "Undistort"
@@ -347,32 +381,19 @@ int main(int argc, char** argv) {
     std::vector<float> xs, ys;
     std::vector<double> te;
 
-    for (size_t win_idx = 0; win_idx < window_centers.size(); ++win_idx) {
-        double tc = window_centers[win_idx];
+    for (size_t win_idx = 0; win_idx < slices.size(); ++win_idx) {
+        const auto& slice = slices[win_idx];
+        double tc = slice.tc;
+        double win_wlen = slice.wlen;
+        size_t n = slice.count;
+        size_t i0 = slice.i0;
 
         // 1. Undistort & prep_window
         auto t0 = std::chrono::high_resolution_clock::now();
 
-        double t_lo = tc - wlen / 2.0;
-        double t_hi = tc + wlen / 2.0;
-
-        size_t i0 = 0, i1 = 0;
-        if (ev_t_f) {
-            float lo_f = static_cast<float>(t_lo);
-            float hi_f = static_cast<float>(t_hi);
-            i0 = std::lower_bound(ev_t_f, ev_t_f + total_events, lo_f) - ev_t_f;
-            i1 = std::lower_bound(ev_t_f, ev_t_f + total_events, hi_f) - ev_t_f;
-        } else {
-            i0 = std::lower_bound(ev_t_d, ev_t_d + total_events, t_lo) - ev_t_d;
-            i1 = std::lower_bound(ev_t_d, ev_t_d + total_events, t_hi) - ev_t_d;
-        }
-
-        size_t n = (i1 > i0) ? (i1 - i0) : 0;
-        if (n < 5000) continue; // Pomiń zbyt małe okna
-
         EventWindow win;
         win.tc = tc;
-        win.wlen = wlen;
+        win.wlen = win_wlen;
         win.intr = intr;
         win.events.resize(n);
 
@@ -402,10 +423,10 @@ int main(int argc, char** argv) {
             }
         }
 
-        int nst = std::max(2, static_cast<int>(std::round(wlen / 0.001)));
+        int nst = std::max(2, static_cast<int>(std::round(win_wlen / 0.001)));
         win.grid.resize(nst + 1);
-        double dt_step = wlen / static_cast<double>(nst);
-        for (int k = 0; k <= nst; ++k) win.grid[k] = t_lo + k * dt_step;
+        double dt_step = win_wlen / static_cast<double>(nst);
+        for (int k = 0; k <= nst; ++k) win.grid[k] = slice.t_start + k * dt_step;
         win.kref = nst / 2;
 
         auto t1 = std::chrono::high_resolution_clock::now();
@@ -481,7 +502,9 @@ int main(int argc, char** argv) {
 
         std::cout << std::setw(6)  << (is_warmup ? "warm" : std::to_string(processed_windows))
                   << std::setw(12) << std::fixed << std::setprecision(4) << tc
-                  << std::setw(12) << n;
+                  << std::setw(10) << std::fixed << std::setprecision(1) << (win_wlen * 1000.0)
+                  << std::setw(12) << n
+                  << std::setw(8)  << (a.slice_mode == "adaptive" ? (slice.triggered_by_count ? "[N]" : "[dt]") : "[fix]");
         if (a.epipolar) {
             std::string cl_str = std::to_string(v1_clusters) + "->" + std::to_string(res.n_clusters);
             std::cout << std::setw(10) << cl_str;
@@ -604,11 +627,23 @@ int main(int argc, char** argv) {
     }
     std::cout << ")\n";
 
+    double total_simulated_s = 0.0;
+    int count_trig = 0;
+    int timeout_trig = 0;
+    for (size_t i = static_cast<size_t>(a.warmup); i < slices.size(); ++i) {
+        total_simulated_s += slices[i].wlen;
+        if (slices[i].triggered_by_count) count_trig++;
+        else timeout_trig++;
+    }
+
     double throughput_mev = (processed_events / (total_time_ms * 1e-3)) * 1e-6;
     std::cout << "  Średnia przepustowość     : " << std::setprecision(2) << throughput_mev << " Mev/s\n";
-    double rt_factor = (processed_windows * a.step_ms) / total_time_ms;
+    double rt_factor = (total_simulated_s * 1000.0) / std::max(total_time_ms, 1e-6);
     std::cout << "  Współczynnik czasu rzecz.: " << std::setprecision(2) << rt_factor
-              << "x czasu rzeczywistego (przetwarza " << rt_factor << "s danych w 1s)\n";
+              << "x czasu rzeczywistego (przetwarza " << total_simulated_s << "s danych w " << (total_time_ms * 1e-3) << "s)\n";
+    if (a.slice_mode == "adaptive") {
+        std::cout << "  Wyzwalacze okien (Dual)  : " << count_trig << " z liczby zdarzen [N], " << timeout_trig << " z limitu czasu [dt]\n";
+    }
     if (!a.viz_dir.empty()) {
         std::cout << "  Wizualizacje zapisano do : " << a.viz_dir << "/ (tryb: " << a.viz_mode
                   << ", motyw: " << a.viz_theme << (a.png ? ", format: PPM + PNG" : ", format: PPM") << ")\n";
@@ -620,6 +655,9 @@ int main(int argc, char** argv) {
         if (jf.is_open()) {
             jf << "{\n"
                << "  \"sequence\": \"" << seq_p.filename().string() << "\",\n"
+               << "  \"slice_mode\": \"" << a.slice_mode << "\",\n"
+               << "  \"count_triggered\": " << count_trig << ",\n"
+               << "  \"timeout_triggered\": " << timeout_trig << ",\n"
                << "  \"window_ms\": " << a.window_ms << ",\n"
                << "  \"step_ms\": " << a.step_ms << ",\n"
                << "  \"blur\": " << a.blur << ",\n"

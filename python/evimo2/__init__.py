@@ -6,7 +6,18 @@ from .detector import depth_for_events, detect_imo, residual_map, regions_for_fr
 from .epipolar import epipolar_direction, estimate_cluster_shift, filter_clusters_epipolar
 from .geometry import UndistortLUT, nlerp, rodrigues_batch, undistort
 from .kinematics import CLASSES, kinematics, world_pose, load_tracks, pose_series
-from .rotcomp import gt_rot_matrices, gt_warp, iwe, prep_window, rot_matrices, warp, warp_translation
+from .rotcomp import (
+    AdaptiveWindowConfig,
+    generate_adaptive_windows,
+    generate_fixed_windows,
+    gt_rot_matrices,
+    gt_warp,
+    iwe,
+    prep_window,
+    rot_matrices,
+    warp,
+    warp_translation,
+)
 
 __version__ = "0.1.0"
 __all__ = [
@@ -22,6 +33,9 @@ __all__ = [
     "rodrigues_batch",
     "nlerp",
     "prep_window",
+    "AdaptiveWindowConfig",
+    "generate_adaptive_windows",
+    "generate_fixed_windows",
     "rot_matrices",
     "warp",
     "iwe",

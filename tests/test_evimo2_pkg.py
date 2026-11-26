@@ -149,3 +149,24 @@ def test_warp_translation():
     assert np.allclose(xs, [70.0])
     assert np.allclose(ys, [240.0])
 
+
+def test_adaptive_windowing():
+    """Weryfikacja podwójnego wyzwalacza (Dual-Trigger) w Bounded Adaptive Windowing."""
+    from evimo2.rotcomp import AdaptiveWindowConfig, generate_adaptive_windows
+
+    # 1. Scenariusz szybkiego ruchu: 20 000 zdarzeń w 15 ms (powinno wyzwolić warunek zdarzeniowy)
+    t_fast = np.linspace(0.0, 0.015, 20000)
+    cfg = AdaptiveWindowConfig(dt_min=0.010, dt_max=0.040, n_target=10000, n_min=1000)
+    wins = generate_adaptive_windows(t_fast, 0.0, 0.015, cfg)
+    assert len(wins) >= 1
+    assert wins[0]["triggered_by_count"] is True
+    assert wins[0]["count"] >= 10000
+
+    # 2. Scenariusz powolnego ruchu: 5 000 zdarzeń w 50 ms (powinno wyzwolić timeout dt_max)
+    t_slow = np.linspace(0.0, 0.050, 5000)
+    cfg_slow = AdaptiveWindowConfig(dt_min=0.010, dt_max=0.030, n_target=10000, n_min=1000)
+    wins_slow = generate_adaptive_windows(t_slow, 0.0, 0.050, cfg_slow)
+    assert len(wins_slow) >= 1
+    assert wins_slow[0]["triggered_by_count"] is False
+    assert wins_slow[0]["wlen"] <= 0.031
+

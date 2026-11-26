@@ -1,5 +1,5 @@
 """Kompensacja rotacji zdarzeń na podstawie prędkości kątowej żyroskopu (SO(3), RadTan, IWE)."""
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -7,6 +7,133 @@ from .calibration import GYRO_BIAS, LAG_CONST_S, R_IMU2CAM, calibrated_gyro
 from .geometry import I3, UndistortLUT, nlerp, q2R, rodrigues_batch, undistort
 
 W_DEFAULT, H_DEFAULT = 640, 480
+
+
+class AdaptiveWindowConfig:
+    """Konfiguracja adaptacyjnego okienkowania hybrydowego (Bounded Adaptive Windowing).
+    
+    Opisana w:
+      * Gallego et al. (IEEE TPAMI 2022) - 'Event-based Vision: A Survey',
+      * Gehrig et al. (IJCV 2020) - 'EKLT: Asynchronous Photometric Feature Tracking using Events and Frames',
+      * Rosinol et al. (IEEE RA-L 2018) - 'Ultimate SLAM? Combining Events, Images, and IMU'.
+    """
+    def __init__(
+        self,
+        dt_min: float = 0.010,
+        dt_max: float = 0.040,
+        n_target: int = 60000,
+        n_min: int = 5000,
+    ):
+        self.dt_min = dt_min
+        self.dt_max = dt_max
+        self.n_target = n_target
+        self.n_min = n_min
+
+
+def generate_adaptive_windows(
+    t: np.ndarray,
+    t_start_limit: float,
+    t_end_limit: float,
+    cfg: Optional[AdaptiveWindowConfig] = None,
+    max_windows: int = -1
+) -> List[Dict[str, Any]]:
+    """Generuje asynchroniczne okna zdarzeń według reguły podwójnego wyzwalacza (Dual-Trigger).
+    
+    Okno zamyka się, gdy:
+      (N >= n_target AND dt >= dt_min) OR (dt >= dt_max AND N >= n_min)
+    """
+    if cfg is None:
+        cfg = AdaptiveWindowConfig()
+    
+    total = len(t)
+    if total == 0:
+        return []
+        
+    i0 = int(np.searchsorted(t, t_start_limit))
+    windows = []
+    
+    while i0 < total:
+        t0 = float(t[i0])
+        if t0 >= t_end_limit:
+            break
+            
+        i1 = i0
+        triggered = False
+        triggered_by_count = False
+        
+        while i1 < total:
+            ti = float(t[i1])
+            if ti > t_end_limit:
+                break
+            dt = ti - t0
+            n = i1 - i0
+            
+            if n >= cfg.n_target and dt >= cfg.dt_min:
+                triggered = True
+                triggered_by_count = True
+                break
+            if dt >= cfg.dt_max:
+                if n >= cfg.n_min:
+                    triggered = True
+                break
+            i1 += 1
+            
+        n = i1 - i0
+        if triggered and n >= cfg.n_min:
+            t_end = float(t[i1 if i1 < total else total - 1])
+            wlen = max(t_end - t0, 1e-4)
+            tc = 0.5 * (t0 + t_end)
+            windows.append({
+                "i0": i0,
+                "i1": i1,
+                "t_start": t0,
+                "t_end": t_end,
+                "tc": tc,
+                "wlen": wlen,
+                "count": n,
+                "triggered_by_count": triggered_by_count
+            })
+            if max_windows > 0 and len(windows) >= max_windows:
+                break
+            i0 = i1
+        else:
+            i0 += max(1000, cfg.n_min // 2)
+            
+    return windows
+
+
+def generate_fixed_windows(
+    t: np.ndarray,
+    t_start_limit: float,
+    t_end_limit: float,
+    wlen: float = 0.040,
+    step: float = 0.040,
+    max_windows: int = -1,
+    n_min: int = 5000
+) -> List[Dict[str, Any]]:
+    """Tradycyjne okna o stałej długości czasowej."""
+    windows = []
+    tc = t_start_limit
+    while tc <= t_end_limit:
+        t_lo = tc - wlen * 0.5
+        t_hi = tc + wlen * 0.5
+        i0, i1 = np.searchsorted(t, [t_lo, t_hi])
+        n = int(i1 - i0)
+        if n >= n_min:
+            windows.append({
+                "i0": int(i0),
+                "i1": int(i1),
+                "t_start": float(t_lo),
+                "t_end": float(t_hi),
+                "tc": float(tc),
+                "wlen": float(wlen),
+                "count": n,
+                "triggered_by_count": False
+            })
+            if max_windows > 0 and len(windows) >= max_windows:
+                break
+        tc += step
+    return windows
 
 
 def prep_window(
