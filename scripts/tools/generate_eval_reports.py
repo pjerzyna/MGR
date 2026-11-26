@@ -210,7 +210,7 @@ def generate_plots(grid_data):
         
         # Subplot 1: Throughput
         bars1 = ax1.bar(x, throughputs, color='#2980b9', alpha=0.85, width=0.55)
-        ax1.axhline(6.0, color='#e74c3c', linestyle='--', lw=2, label='Fizyczny limit Prophesee VGA (~6.0 Mev/s)')
+        ax1.axhline(6.0, color='#e74c3c', linestyle='--', lw=2, label='Maks. strumień w nagraniach EVIMO2 (~6.0 Mev/s)')
         ax1.set_title("Przepustowość silnika C++ (Throughput)", fontsize=12, fontweight='bold')
         ax1.set_ylabel("Przepustowość [Mev/s]", fontsize=11)
         ax1.set_xticks(x)

@@ -34,7 +34,7 @@ Pomiary przeprowadzono na pojedynczym rdzeniu procesora x86 (bez wielowątkowoś
 > * **Łączna skala testu:** Silnik przetworzył **30 530 028 zdarzeń** w 237 oknach bez ani jednego błędu pamięci czy wycieku.
 > * **Stabilność throughputu:** Przepustowość C++ waha się w bardzo wąskim i przewidywalnym przedziale **4.01 – 5.04 Mev/s**.
 > * **Czas rzeczywisty:** Na 6 z 7 sekwencji średni czas obliczeń wynosi $16.4\text{--}28.2\text{ ms}$, co przy długości okna $40\text{ ms}$ oznacza pracę w czasie rzeczywistym ze średnim współczynnikiem **1.7× czasu rzeczywistego**.
-> * **Przypadek `scene13_01`:** Sekwencja ta cechuje się ekstremalną gęstością strumienia (ponad 8.8 mln zdarzeń w 1.5 s — sprzętowe nasycenie szyny sensora $\approx 5.8\text{ Mev/s}$). Nawet przy tak skrajnym obciążeniu silnik osiąga rekordowe **5.04 Mev/s**.
+> * **Przypadek `scene13_01`:** Sekwencja ta cechuje się ekstremalną gęstością strumienia (ponad 8.8 mln zdarzeń w 1.5 s — szczytowa gęstość strumienia w nagraniach EVIMO2 $\approx 5.8\text{ Mev/s}$, przy sprzętowym limicie odczytu sensora Prophesee Gen3.1 wynoszącym 50–66 Meps). Nawet przy tak skrajnym obciążeniu silnik osiąga rekordowe **5.04 Mev/s**.
 
 Plik wykresu wydajności: [`throughput_latency_cpp.png`](throughput_latency_cpp.png)
 
@@ -42,19 +42,37 @@ Plik wykresu wydajności: [`throughput_latency_cpp.png`](throughput_latency_cpp.
 
 ## 3. Jakość detekcji względem Ground Truth (Wpływ kompensacji rotacji SO(3))
 
-Porównanie jakości detekcji dla wariantu **surowego (brak kompensacji)** oraz **pełnego potoku $SO(3)$ z żyroskopem IMU** przy standardowym punkcie pracy ($r=3$, $\tau=0.5$ oraz $r=3$, $\tau=0.3$):
+### Tabela 3.1: Punkt Zbalansowany ($r=3, \tau=0.3$) – Rekomendowany standard roboczy (Recall $\approx 49.0\%$)
 
-| Sekwencja | Kategoria | Wariant | Czułość (Recall) | Odsetek błędów tła (FPR) | Precyzja (Precision) | Jakość dopasowania (IoU) | **Redukcja FPR tła** | **Skok precyzji** |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`scene6_03`** | **Kat. I** *(spoczynek)* | Brak kompensacji<br>**Kompensacja SO(3)** | 14.2%<br>14.3% | 11.1%<br>11.0% | 91.9%<br>**92.0%** | 14.0%<br>14.1% | **1.00×** *(brak zmian)* | **+0.1 pp** |
-| **`scene14_05`** | **Kat. II** *(czysta rotacja)* | Brak kompensacji<br>**Kompensacja SO(3)** | 33.0%<br>30.8% | 27.7%<br>**7.5%** | 9.5%<br>**27.1%** | 8.0%<br>16.9% | **3.68× mniej błędów!** | **+17.6 pp** |
-| **`scene14_04`** | **Kat. II** *(czysta rotacja)* | Brak kompensacji<br>**Kompensacja SO(3)** | 27.3%<br>25.2% | 18.6%<br>**10.4%** | 10.0%<br>**15.6%** | 7.9%<br>10.7% | **1.79× mniej błędów** | **+5.6 pp** |
-| **`scene13_02`** | **Kat. II** *(szybka rotacja)* | Brak kompensacji<br>**Kompensacja SO(3)** | 19.7%<br>16.4% | 14.2%<br>**4.6%** | 2.6%<br>**4.3%** | 2.3%<br>3.6% | **3.10× mniej błędów!** | **+1.8 pp** |
-| **`scene13_01`** | **Kat. III** *(paralaksa)* | Brak kompensacji<br>**Kompensacja SO(3)** | 30.1%<br>27.6% | 15.1%<br>**6.4%** | 7.4%<br>**14.9%** | 6.4%<br>10.7% | **2.36× mniej błędów** | **+7.4 pp** |
-| **`scene15_02`** | **Kat. III** *(ruch złożony)* | Brak kompensacji<br>**Kompensacja SO(3)** | 20.8%<br>21.2% | 2.9%<br>**1.8%** | 60.9%<br>**73.5%** | 18.4%<br>19.7% | **1.66× mniej błędów** | **+12.6 pp** |
-| **`scene15_05`** | **Kat. III** *(ruch złożony)* | Brak kompensacji<br>**Kompensacja SO(3)** | 45.8%<br>45.7% | 6.7%<br>**6.6%** | 79.3%<br>**79.0%** | 40.9%<br>40.7% | **1.00×** | **-0.3 pp** |
+| Sekwencja | Kategoria | Czułość (Recall) | Błędy tła (FPR) | Precyzja (Precision) | Redukcja FPR tła | Skok precyzji |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| `scene6_03` | **Kat. I** *(spoczynek)* | 40.9% | 25.8% | 93.6% | **1.00×** *(neutralna)* | **+0.1 pp** |
+| `scene14_05` | **Kat. II** *(czysta rotacja)* | 53.3% | 19.0% | 21.2% | **2.32× mniej błędów!** | **+10.5 pp** |
+| `scene14_04` | **Kat. II** *(czysta rotacja)* | 50.8% | 19.7% | 17.5% | **1.60× mniej błędów** | **+4.7 pp** |
+| `scene13_02` | **Kat. II** *(szybka rotacja)* | 39.5% | 12.6% | 4.5% | **2.40× mniej błędów!** | **+2.0 pp** |
+| `scene13_01` | **Kat. III** *(paralaksa)* | 46.8% | 17.5% | 9.8% | **2.06× mniej błędów** | **+4.0 pp** |
+| `scene15_02` | **Kat. III** *(ruch złożony)* | 45.5% | 7.4% | 57.7% | **1.63× mniej błędów** | **+13.1 pp** |
+| `scene15_05` | **Kat. III** *(wysokie IMO)* | 66.3% | 14.9% | 76.8% | **1.12×** | **-0.2 pp** |
 
-Plik wykresu krzywych ROC: [`roc_curves_categories.png`](roc_curves_categories.png)
+---
+
+### Tabela 3.2: Punkt Wysokiej Precyzji ($r=3, \tau=0.5$) – Kryterium Neymana-Pearsona (Low-FPR $\le 8\%$)
+
+| Sekwencja | Kategoria | Czułość (Recall) | Błędy tła (FPR) | Precyzja (Precision) | Redukcja FPR tła | Skok precyzji |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| `scene6_03` | **Kat. I** *(spoczynek)* | 14.3% | 11.0% | 92.0% | **1.00×** *(neutralna)* | **+0.1 pp** |
+| `scene14_05` | **Kat. II** *(czysta rotacja)* | 30.8% | 7.5% | 27.1% | **3.68× mniej błędów!** | **+17.6 pp** |
+| `scene14_04` | **Kat. II** *(czysta rotacja)* | 25.2% | 10.4% | 15.6% | **1.79× mniej błędów** | **+5.6 pp** |
+| `scene13_02` | **Kat. II** *(szybka rotacja)* | 16.4% | 4.6% | 4.3% | **3.10× mniej błędów!** | **+1.8 pp** |
+| `scene13_01` | **Kat. III** *(paralaksa)* | 27.6% | 6.4% | 14.9% | **2.36× mniej błędów** | **+7.4 pp** |
+| `scene15_02` | **Kat. III** *(ruch złożony)* | 21.2% | 1.8% | 73.5% | **1.66× mniej błędów** | **+12.6 pp** |
+| `scene15_05` | **Kat. III** *(wysokie IMO)* | 45.7% | 6.6% | 79.0% | **1.00×** | **-0.3 pp** |
+
+Pliki wykresów:
+* Wykres słupkowy redukcji FPR i skoku precyzji dla Punktu Wysokiej Precyzji ($\tau=0.5$): [`operating_point_tau05_summary.png`](operating_point_tau05_summary.png)
+* Wykres słupkowy redukcji FPR i skoku precyzji dla Punktu Zbalansowanego ($\tau=0.3$): [`operating_point_tau03_summary.png`](operating_point_tau03_summary.png)
+* Krzywe ROC i analiza punktu zbalansowanego ($r=3, \tau=0.3$): [`roc_curves_tau03.png`](roc_curves_tau03.png)
+* Trójpanelowe krzywe ROC pełnego omiatania ($r=3, \tau \in [0.2, 0.5]$): [`roc_curves_categories.png`](roc_curves_categories.png)
 
 ---
 

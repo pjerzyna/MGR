@@ -1,8 +1,8 @@
 sequence,category,processed_windows,processed_events,total_time_ms,avg_window_ms,avg_undist_ms,avg_warp_ms,avg_detect_ms,throughput_mev,rt_factor
-scene6_dyn_train_03_000000,Spoczynek (czyste IMO),36,2366078,590.39,16.3997,7.58925,4.02,4.79047,4.00765,2.43907
-scene14_dyn_test_05_000000,Czysta rotacja (wzorzec),34,3081126,742.235,21.8304,9.98789,5.79492,6.04763,4.15115,1.8323
-scene14_dyn_test_04_000000,Czysta rotacja (mały ruch),37,4648575,1043.94,28.2147,14.0535,7.67265,6.48849,4.4529,1.4177
-scene13_dyn_test_02_000000,Szybka rotacja (stress-test FPR),38,4656308,970.478,25.5389,13.4958,7.03809,5.00497,4.79795,1.56624
-scene13_dyn_test_01_000000,Ruch złożony (silna paralaksa),38,8843398,1754.02,46.1585,25.7136,13.4566,6.98828,5.04178,0.866579
-scene15_dyn_test_02_000000,Ruch złożony (duży udział IMO),38,4728099,1071.2,28.1896,13.9692,7.92906,6.29135,4.41382,1.41896
-scene15_dyn_test_05_000000,Ruch złożony (wysokie IMO),19,2206444,497.969,26.2089,12.7674,6.99442,6.44713,4.43088,1.5262
+scene6_dyn_train_03_000000,Spoczynek (czyste IMO),36,2366078,755.086,20.9746,3.07303,8.66383,9.23775,3.13352,1.90707
+scene14_dyn_test_05_000000,Czysta rotacja (wzorzec),34,3081126,787.538,23.1629,3.34027,9.87735,9.94524,3.91235,1.7269
+scene14_dyn_test_04_000000,Czysta rotacja (mały ruch),37,4648575,1141.44,30.8498,4.79038,14.3682,11.6912,4.07254,1.2966
+scene13_dyn_test_02_000000,Szybka rotacja (stress-test FPR),38,4656308,1031.54,27.1459,4.37294,13.2819,9.49103,4.51392,1.47352
+scene13_dyn_test_01_000000,Ruch złożony (silna paralaksa),38,8843398,1697.11,44.6607,7.94,23.5696,13.1512,5.21087,0.895642
+scene15_dyn_test_02_000000,Ruch złożony (duży udział IMO),38,4728099,1092.55,28.7513,4.51735,13.6213,10.6126,4.32758,1.39124
+scene15_dyn_test_05_000000,Ruch złożony (wysokie IMO),19,2206444,578.399,30.4421,4.17769,14.0465,12.2179,3.81474,1.31397
