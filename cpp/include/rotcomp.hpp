@@ -54,7 +54,8 @@ template <typename TimeIterator, typename XIterator, typename YIterator, typenam
 inline EventWindow prep_window(double tc, double wlen,
                                TimeIterator t_begin, TimeIterator t_end,
                                XIterator x_begin, YIterator y_begin, PolIterator p_begin,
-                               const CameraIntrinsics& intr) {
+                               const CameraIntrinsics& intr,
+                               const UndistortLUT* lut = nullptr) {
     EventWindow win;
     win.tc = tc;
     win.wlen = wlen;
@@ -71,21 +72,37 @@ inline EventWindow prep_window(double tc, double wlen,
     size_t count = idx1 > idx0 ? idx1 - idx0 : 0;
 
     win.events.resize(count);
-    for (size_t i = 0; i < count; ++i) {
-        size_t src_idx = idx0 + i;
-        double t = *(t_begin + src_idx);
-        float x = static_cast<float>(*(x_begin + src_idx));
-        float y = static_cast<float>(*(y_begin + src_idx));
-        uint8_t p = static_cast<uint8_t>(*(p_begin + src_idx));
+    if (lut && !lut->empty()) {
+        for (size_t i = 0; i < count; ++i) {
+            size_t src_idx = idx0 + i;
+            double t = *(t_begin + src_idx);
+            float x = static_cast<float>(*(x_begin + src_idx));
+            float y = static_cast<float>(*(y_begin + src_idx));
+            uint8_t p = static_cast<uint8_t>(*(p_begin + src_idx));
 
-        double bx = 0.0, by = 0.0;
-        undistort_point(x, y, intr, bx, by, 8);
+            win.events[i].t = t;
+            win.events[i].px = x;
+            win.events[i].py = y;
+            win.events[i].bearing = lut->lookup(static_cast<int>(x), static_cast<int>(y));
+            win.events[i].p = p;
+        }
+    } else {
+        for (size_t i = 0; i < count; ++i) {
+            size_t src_idx = idx0 + i;
+            double t = *(t_begin + src_idx);
+            float x = static_cast<float>(*(x_begin + src_idx));
+            float y = static_cast<float>(*(y_begin + src_idx));
+            uint8_t p = static_cast<uint8_t>(*(p_begin + src_idx));
 
-        win.events[i].t = t;
-        win.events[i].px = x;
-        win.events[i].py = y;
-        win.events[i].bearing = Vec3{bx, by, 1.0};
-        win.events[i].p = p;
+            double bx = 0.0, by = 0.0;
+            undistort_point(x, y, intr, bx, by, 8);
+
+            win.events[i].t = t;
+            win.events[i].px = x;
+            win.events[i].py = y;
+            win.events[i].bearing = Vec3{bx, by, 1.0};
+            win.events[i].p = p;
+        }
     }
 
     int nst = std::max(2, static_cast<int>(std::round(wlen / 0.001)));

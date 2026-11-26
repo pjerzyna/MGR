@@ -4,17 +4,27 @@ from typing import Any, Dict, Optional, Tuple
 import numpy as np
 
 from .calibration import GYRO_BIAS, LAG_CONST_S, R_IMU2CAM, calibrated_gyro
-from .geometry import I3, nlerp, q2R, rodrigues_batch, undistort
+from .geometry import I3, UndistortLUT, nlerp, q2R, rodrigues_batch, undistort
 
 W_DEFAULT, H_DEFAULT = 640, 480
 
 
-def prep_window(tc: float, wlen: float, t: np.ndarray, xy: np.ndarray, intr: Dict[str, Any]) -> Dict[str, Any]:
-    """Przygotowuje okno zdarzeń wokół chwili tc: odwraca dystorsję, tworzy promienie i siatkę całkowania."""
+def prep_window(
+    tc: float,
+    wlen: float,
+    t: np.ndarray,
+    xy: np.ndarray,
+    intr: Dict[str, Any],
+    lut: Optional[UndistortLUT] = None
+) -> Dict[str, Any]:
+    """Przygotowuje okno zdarzeń wokół chwili tc: odwraca dystorsję (opcjonalnie przez LUT O(1)), tworzy promienie i siatkę całkowania."""
     i0, i1 = np.searchsorted(t, [tc - wlen / 2.0, tc + wlen / 2.0])
     te = np.asarray(t[i0:i1], dtype=np.float64)
     pix = np.asarray(xy[i0:i1], dtype=np.float64)
-    bx, by = undistort(pix[:, 0], pix[:, 1], intr)
+    if lut is not None:
+        bx, by = lut.lookup(pix[:, 0], pix[:, 1])
+    else:
+        bx, by = undistort(pix[:, 0], pix[:, 1], intr)
     nst = max(2, int(round(wlen / 0.001)))
     return dict(
         tc=tc,
@@ -25,6 +35,7 @@ def prep_window(tc: float, wlen: float, t: np.ndarray, xy: np.ndarray, intr: Dic
         kref=nst // 2,
         n=len(te),
         intr=intr,
+        lut=lut,
     )
 
 

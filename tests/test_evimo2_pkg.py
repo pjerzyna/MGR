@@ -62,6 +62,35 @@ def test_undistort_pinhole():
     assert np.allclose(y, [0.0, 0.5])
 
 
+def test_undistort_lut_exact():
+    """Weryfikacja prekomputowanej tablicy LUT: 100% bitowa zgodność z undistort."""
+    intr = {
+        "fx": 556.57, "fy": 556.08, "cx": 321.84, "cy": 225.61,
+        "k1": -0.108, "k2": 0.206, "p1": -0.00065, "p2": -0.00055
+    }
+    lut = geometry.UndistortLUT(intr, width=640, height=480, iters=8)
+
+    # Test na siatce losowych pikseli
+    np.random.seed(42)
+    px = np.random.randint(0, 640, size=500).astype(float)
+    py = np.random.randint(0, 480, size=500).astype(float)
+
+    # Porównanie z bezpośrednim undistort
+    exp_x, exp_y = geometry.undistort(px, py, intr, iters=8)
+    lut_x, lut_y = lut.lookup(px, py)
+
+    assert np.allclose(lut_x, exp_x, atol=1e-12)
+    assert np.allclose(lut_y, exp_y, atol=1e-12)
+
+    # Test w prep_window
+    t = np.array([0.01, 0.02, 0.03])
+    xy = np.column_stack([px[:3], py[:3]])
+    win_direct = rotcomp.prep_window(0.02, 0.04, t, xy, intr)
+    win_lut = rotcomp.prep_window(0.02, 0.04, t, xy, intr, lut=lut)
+
+    assert np.allclose(win_direct["bearing"], win_lut["bearing"], atol=1e-12)
+
+
 def test_calibrated_gyro():
     """Kompensacja biasu i rotacji IMU->kamera: R (omega - b)."""
     R = np.diag([-1.0, -1.0, 1.0])

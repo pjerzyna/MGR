@@ -144,8 +144,8 @@ void test_python_reference(const std::string& data_dir) {
     const uint8_t* ref_p = static_cast<const uint8_t*>(npy_p.data());
     const double* ref_bearing = static_cast<const double*>(npy_bearing.data());
 
-    // 1. Walidacja undistort i make_window
-    std::cout << "[5/7] Walidacja numeryczna undistort & make_window... ";
+    // 1. Walidacja undistort i make_window (zarówno direct jak i przez tablicę LUT)
+    std::cout << "[5/7] Walidacja numeryczna undistort, UndistortLUT & make_window... ";
     std::vector<double> ev_t(ref_t, ref_t + n_ev);
     std::vector<double> ev_x(n_ev), ev_y(n_ev);
     std::vector<uint8_t> ev_p(ref_p, ref_p + n_ev);
@@ -154,6 +154,7 @@ void test_python_reference(const std::string& data_dir) {
         ev_y[i] = ref_pix[2 * i + 1];
     }
 
+    // A. Weryfikacja bezpośredniej inwersji
     EventWindow win = prep_window(tc, wlen,
                                   ev_t.begin(), ev_t.end(),
                                   ev_x.begin(), ev_y.begin(), ev_p.begin(),
@@ -173,8 +174,23 @@ void test_python_reference(const std::string& data_dir) {
         max_err_bearing = std::max(max_err_bearing, std::abs(by - exp_by));
         max_err_bearing = std::max(max_err_bearing, std::abs(bz - exp_bz));
     }
-    std::cout << "Maks. błąd bearing: " << max_err_bearing;
     assert(max_err_bearing < 1e-10);
+
+    // B. Weryfikacja prekomputowanej tablicy LUT O(1) (Raspberry Pi 5)
+    UndistortLUT lut(intr, 640, 480, 8);
+    EventWindow win_lut = prep_window(tc, wlen,
+                                      ev_t.begin(), ev_t.end(),
+                                      ev_x.begin(), ev_y.begin(), ev_p.begin(),
+                                      intr, &lut);
+    assert(win_lut.events.size() == n_ev);
+    double max_err_lut = 0.0;
+    for (size_t i = 0; i < n_ev; ++i) {
+        max_err_lut = std::max(max_err_lut, std::abs(win_lut.events[i].bearing.x - ref_bearing[3 * i]));
+        max_err_lut = std::max(max_err_lut, std::abs(win_lut.events[i].bearing.y - ref_bearing[3 * i + 1]));
+        max_err_lut = std::max(max_err_lut, std::abs(win_lut.events[i].bearing.z - ref_bearing[3 * i + 2]));
+    }
+    assert(max_err_lut < 1e-10);
+    std::cout << "Maks. błąd direct: " << max_err_bearing << ", błąd LUT: " << max_err_lut;
     std::cout << " (OK)\n";
 
     // 2. Walidacja rot_matrices i warp

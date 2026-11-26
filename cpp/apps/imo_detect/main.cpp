@@ -32,6 +32,7 @@ struct AppArgs {
     std::string out_dir = "";
     std::string json_path = "";
     int warmup = 0;
+    bool use_lut = true;                 // Prekomputowana tablica LUT dla O(1) undistort (Raspberry Pi 5)
 
     // Filtr epipolarny FOE (v2)
     bool epipolar = false;
@@ -94,6 +95,8 @@ static bool parse_args(int argc, char** argv, AppArgs& a) {
         else if (s == "--no-boxes") a.viz_boxes = "none";
         else if (s == "--png") a.png = true;
         else if (s == "--no-png") a.png = false;
+        else if (s == "--no-lut") a.use_lut = false;
+        else if (s == "--lut") a.use_lut = true;
         else return false;
     }
     return true;
@@ -303,6 +306,7 @@ int main(int argc, char** argv) {
         if (has_cam_vel || a.has_vcam_override) std::cout << " (v_cam active)";
         else std::cout << " (v_cam: no data)";
     }
+    std::cout << " | LUT: " << (a.use_lut ? "Włączona (O(1))" : "Wyłączona (8 iters)");
     std::cout << "\n";
     std::cout << "================================================================================\n";
     std::cout << std::setw(6)  << "Okno"
@@ -332,6 +336,12 @@ int main(int argc, char** argv) {
     double total_epi_ms = 0.0;
     size_t processed_events = 0;
     int processed_windows = 0;
+
+    // Inicjalizacja tablicy LUT dla odwracania dystorsji w czasie rzeczywistym O(1) (Raspberry Pi 5)
+    UndistortLUT lut;
+    if (a.use_lut) {
+        lut.init(intr, DEFAULT_W, DEFAULT_H, 8);
+    }
 
     // Bufory wielokrotnego użytku per okno
     std::vector<float> xs, ys;
@@ -366,19 +376,30 @@ int main(int argc, char** argv) {
         win.intr = intr;
         win.events.resize(n);
 
-        for (size_t i = 0; i < n; ++i) {
-            size_t src = i0 + i;
-            double t = get_time(src);
-            float x = get_x(src);
-            float y = get_y(src);
-            double bx = 0.0, by = 0.0;
-            undistort_point(x, y, intr, bx, by, 8);
-
-            win.events[i].t = t;
-            win.events[i].px = x;
-            win.events[i].py = y;
-            win.events[i].bearing = Vec3{bx, by, 1.0};
-            win.events[i].p = get_p(src);
+        if (a.use_lut) {
+            for (size_t i = 0; i < n; ++i) {
+                size_t src = i0 + i;
+                float x = get_x(src);
+                float y = get_y(src);
+                win.events[i].t = get_time(src);
+                win.events[i].px = x;
+                win.events[i].py = y;
+                win.events[i].bearing = lut.lookup(static_cast<int>(x), static_cast<int>(y));
+                win.events[i].p = get_p(src);
+            }
+        } else {
+            for (size_t i = 0; i < n; ++i) {
+                size_t src = i0 + i;
+                float x = get_x(src);
+                float y = get_y(src);
+                double bx = 0.0, by = 0.0;
+                undistort_point(x, y, intr, bx, by, 8);
+                win.events[i].t = get_time(src);
+                win.events[i].px = x;
+                win.events[i].py = y;
+                win.events[i].bearing = Vec3{bx, by, 1.0};
+                win.events[i].p = get_p(src);
+            }
         }
 
         int nst = std::max(2, static_cast<int>(std::round(wlen / 0.001)));

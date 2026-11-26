@@ -4,7 +4,7 @@ from .calibration import GYRO_BIAS, LAG_CONST_S, R_IMU2CAM, calibrated_gyro
 from .common import event_index_at_time, load_events, load_info
 from .detector import depth_for_events, detect_imo, residual_map, regions_for_frame
 from .epipolar import epipolar_direction, estimate_cluster_shift, filter_clusters_epipolar
-from .geometry import nlerp, rodrigues_batch, undistort
+from .geometry import UndistortLUT, nlerp, rodrigues_batch, undistort
 from .kinematics import CLASSES, kinematics, world_pose, load_tracks, pose_series
 from .rotcomp import gt_rot_matrices, gt_warp, iwe, prep_window, rot_matrices, warp, warp_translation
 
@@ -18,6 +18,7 @@ __all__ = [
     "LAG_CONST_S",
     "calibrated_gyro",
     "undistort",
+    "UndistortLUT",
     "rodrigues_batch",
     "nlerp",
     "prep_window",
